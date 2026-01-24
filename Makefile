@@ -1,11 +1,12 @@
 GO = $(shell which go 2>/dev/null)
 DOCKER = $(shell which docker 2>/dev/null)
 
-APP				:= silo-proxy
+SERVER			:= silo-proxy-server
+AGENT			:= silo-proxy-agent
 VERSION 		?= v0.1.0
 LDFLAGS 		:= -ldflags "-X main.AppVersion=$(VERSION)"
 
-.PHONY: all build clean test generate swagger docker
+.PHONY: all build build-server build-agent clean test generate swagger docker
 
 all: clean build
 
@@ -15,14 +16,17 @@ install:
 clean:
 	$(GO) clean -testcache
 	$(RM) -rf bin/*
-build:
-	$(GO) build -o bin/$(APP)	$(LDFLAGS) cmd/$(APP)/*.go
+build: build-server build-agent
+build-server:
+	$(GO) build -o bin/$(SERVER) $(LDFLAGS) cmd/$(SERVER)/*.go
+build-agent:
+	$(GO) build -o bin/$(AGENT) $(LDFLAGS) cmd/$(AGENT)/*.go
 run:
-	$(GO) run $(LDFLAGS) cmd/$(APP)/*.go
+	$(GO) run $(LDFLAGS) cmd/$(SERVER)/*.go
 test:
 	$(GO) test -v ./...
 generate: install
 	sqlc generate
-	swag init -g cmd/$(APP)/main.go -o docs
+	swag init -g cmd/$(SERVER)/main.go -o docs
 docker:
-	$(DOCKER) build --build-arg APP=$(APP) --build-arg VERSION=$(VERSION) -t $(APP):$(VERSION) -t $(APP):latest .
+	$(DOCKER) build --build-arg APP=$(SERVER) --build-arg VERSION=$(VERSION) -t $(SERVER):$(VERSION) -t $(SERVER):latest .
