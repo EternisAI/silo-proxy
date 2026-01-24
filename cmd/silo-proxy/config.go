@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/EternisAI/silo-proxy/internal/api/http"
 	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )
 
 type Config struct {
-	Log LogConfig
-	// Http       http.Config
+	Log  LogConfig
+	Http http.Config
 }
 
 var config Config

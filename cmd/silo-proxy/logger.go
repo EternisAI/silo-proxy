@@ -4,6 +4,8 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+
+	"github.com/EternisAI/silo-proxy/internal/api/http"
 )
 
 const (
@@ -15,6 +17,7 @@ const (
 
 type LogConfig struct {
 	Level string
+	Http  http.Config
 }
 
 func initLogger(logLevel string) {
