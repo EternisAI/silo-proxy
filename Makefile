@@ -6,7 +6,7 @@ AGENT			:= silo-proxy-agent
 VERSION 		?= v0.1.0
 LDFLAGS 		:= -ldflags "-X main.AppVersion=$(VERSION)"
 
-.PHONY: all build build-server build-agent clean test generate swagger docker
+.PHONY: all build build-server build-agent clean test generate swagger docker protoc protoc-gen
 
 all: clean build
 
@@ -30,3 +30,20 @@ generate: install
 	swag init -g cmd/$(SERVER)/main.go -o docs
 docker:
 	$(DOCKER) build --build-arg APP=$(SERVER) --build-arg VERSION=$(VERSION) -t $(SERVER):$(VERSION) -t $(SERVER):latest .
+
+protoc:
+ifeq ($(PROTOC_GEN_GO),)
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+endif
+ifeq ($(PROTOC_GEN_GO_GRPC),)
+	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+endif
+
+protoc-gen: protoc
+	protoc \
+	  --proto_path=proto \
+	  --go_out=proto \
+	  --go_opt=paths=source_relative \
+	  --go-grpc_out=proto \
+	  --go-grpc_opt=paths=source_relative \
+	  proto/proxy.proto

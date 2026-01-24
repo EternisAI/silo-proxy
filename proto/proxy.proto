@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package proxy;
+
+option go_package = "github.com/EternisAI/silo-proxy/proto";
+
+// ProxyService defines the communication between Silo Proxy Server and Proxy Agent
+service ProxyService {
+  // Bidirectional stream for proxy communication
+  // Agent initiates and maintains the connection
+  rpc Stream(stream ProxyMessage) returns (stream ProxyMessage);
+}
+
+// ProxyMessage represents a message in the stream
+message ProxyMessage {
+  string id = 1;           // Unique message ID
+  MessageType type = 2;    // Message type
+  bytes payload = 3;       // Message payload
+  map<string, string> metadata = 4; // Additional metadata
+}
+
+// MessageType defines the type of message
+enum MessageType {
+  UNKNOWN = 0;
+  // Agent sends PING to keep connection alive
+  PING = 1;
+  // Server responds with PONG
+  PONG = 2;
+  // Server sends REQUEST to forward to local services
+  REQUEST = 3;
+  // Agent sends RESPONSE back to server
+  RESPONSE = 4;
+}
