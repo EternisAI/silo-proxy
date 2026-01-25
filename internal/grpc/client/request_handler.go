@@ -79,9 +79,14 @@ func (rh *RequestHandler) HandleRequest(msg *proto.ProxyMessage) (*proto.ProxyMe
 		Type:    proto.MessageType_RESPONSE,
 		Payload: body,
 		Metadata: map[string]string{
-			"status_code":  strconv.Itoa(resp.StatusCode),
-			"content_type": resp.Header.Get("Content-Type"),
+			"status_code": strconv.Itoa(resp.StatusCode),
 		},
+	}
+
+	for key, values := range resp.Header {
+		if len(values) > 0 {
+			responseMsg.Metadata["header_"+key] = values[0]
+		}
 	}
 
 	return responseMsg, nil

@@ -87,9 +87,14 @@ func (h *ProxyHandler) ProxyRequest(c *gin.Context) {
 		}
 	}
 
-	contentType := "application/octet-stream"
-	if ct, ok := response.Metadata["content_type"]; ok {
-		contentType = ct
+	for key, value := range response.Metadata {
+		if key != "status_code" && len(value) > 0 {
+			headerName := key
+			if len(key) > 7 && key[:7] == "header_" {
+				headerName = key[7:]
+			}
+			c.Header(headerName, value)
+		}
 	}
 
 	slog.Info("Received response from agent",
@@ -97,5 +102,6 @@ func (h *ProxyHandler) ProxyRequest(c *gin.Context) {
 		"message_id", response.Id,
 		"status_code", statusCode)
 
-	c.Data(statusCode, contentType, response.Payload)
+	c.Status(statusCode)
+	c.Writer.Write(response.Payload)
 }
