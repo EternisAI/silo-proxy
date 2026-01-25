@@ -78,32 +78,35 @@ grpc:
 
 ## Usage
 
-### Server
+### 1. Start Server
 ```bash
-make run
-# Server starts on:
-# - HTTP: http://localhost:8080
-# - gRPC: localhost:9090
+make run  # HTTP :8080, gRPC :9090
 ```
 
-### Agent
+### 2. Start Agent
 ```bash
-make run-agent
-# Agent connects to server and forwards requests to http://localhost:3000
+make run-agent  # Connects to server, forwards to :3000
 ```
 
-### Making Requests
+### 3. Start Frontend Simulator (local service)
 ```bash
-# GET request
-curl http://localhost:8080/proxy/agent-1/test
+cd py/frontend-simulator && ./run.sh  # Runs on :3000
+```
 
-# POST request with JSON
+### 4. Access via Proxy
+Open browser to:
+```
+http://localhost:8080/proxy/agent-1/
+```
+
+### Test with curl
+```bash
+# GET
+curl http://localhost:8080/proxy/agent-1/api/status
+
+# POST
 curl -X POST -H "Content-Type: application/json" \
-  -d '{"key":"value"}' \
-  http://localhost:8080/proxy/agent-1/api/endpoint
-
-# With query parameters
-curl "http://localhost:8080/proxy/agent-1/search?q=test&limit=10"
+  -d '{"test":"data"}' http://localhost:8080/proxy/agent-1/api/data
 ```
 
 ## Next Steps
