@@ -11,11 +11,13 @@ import (
 
 type StreamHandler struct {
 	connManager *ConnectionManager
+	server      *Server
 }
 
-func NewStreamHandler(connManager *ConnectionManager) *StreamHandler {
+func NewStreamHandler(connManager *ConnectionManager, server *Server) *StreamHandler {
 	return &StreamHandler{
 		connManager: connManager,
+		server:      server,
 	}
 }
 
@@ -133,6 +135,7 @@ func (sh *StreamHandler) processMessage(agentID string, msg *proto.ProxyMessage)
 
 	case proto.MessageType_RESPONSE:
 		slog.Debug("RESPONSE received", "agent_id", agentID, "message_id", msg.Id)
+		sh.server.HandleResponse(msg)
 
 	default:
 		slog.Warn("Unknown message type", "agent_id", agentID, "type", msg.Type)

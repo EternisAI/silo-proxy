@@ -5,30 +5,41 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/EternisAI/silo-proxy/proto"
 	"google.golang.org/grpc"
 )
 
+const (
+	requestTimeout = 30 * time.Second
+)
+
 type Server struct {
 	proto.UnimplementedProxyServiceServer
-	grpcServer     *grpc.Server
-	connManager    *ConnectionManager
-	streamHandler  *StreamHandler
-	port           int
-	listener       net.Listener
+	grpcServer      *grpc.Server
+	connManager     *ConnectionManager
+	streamHandler   *StreamHandler
+	port            int
+	listener        net.Listener
+	pendingRequests map[string]chan *proto.ProxyMessage
+	pendingMu       sync.RWMutex
 }
 
 func NewServer(port int) *Server {
 	connManager := NewConnectionManager()
-	streamHandler := NewStreamHandler(connManager)
 
-	return &Server{
-		connManager:   connManager,
-		streamHandler: streamHandler,
-		port:          port,
+	s := &Server{
+		connManager:     connManager,
+		port:            port,
+		pendingRequests: make(map[string]chan *proto.ProxyMessage),
 	}
+
+	streamHandler := NewStreamHandler(connManager, s)
+	s.streamHandler = streamHandler
+
+	return s
 }
 
 func (s *Server) Start() error {
@@ -80,4 +91,52 @@ func (s *Server) StopWithTimeout(timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	return s.Stop(ctx)
+}
+
+func (s *Server) SendRequestToAgent(ctx context.Context, agentID string, msg *proto.ProxyMessage) (*proto.ProxyMessage, error) {
+	respCh := make(chan *proto.ProxyMessage, 1)
+
+	s.pendingMu.Lock()
+	s.pendingRequests[msg.Id] = respCh
+	s.pendingMu.Unlock()
+
+	defer func() {
+		s.pendingMu.Lock()
+		delete(s.pendingRequests, msg.Id)
+		s.pendingMu.Unlock()
+	}()
+
+	if err := s.connManager.SendToAgent(agentID, msg); err != nil {
+		return nil, fmt.Errorf("failed to send request to agent: %w", err)
+	}
+
+	select {
+	case response := <-respCh:
+		return response, nil
+	case <-time.After(requestTimeout):
+		return nil, fmt.Errorf("request timeout")
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (s *Server) HandleResponse(msg *proto.ProxyMessage) {
+	s.pendingMu.RLock()
+	respCh, ok := s.pendingRequests[msg.Id]
+	s.pendingMu.RUnlock()
+
+	if !ok {
+		slog.Warn("Received response for unknown request", "message_id", msg.Id)
+		return
+	}
+
+	select {
+	case respCh <- msg:
+	default:
+		slog.Warn("Response channel full or closed", "message_id", msg.Id)
+	}
+}
+
+func (s *Server) GetConnectionManager() *ConnectionManager {
+	return s.connManager
 }

@@ -35,12 +35,14 @@ type Client struct {
 	reconnectDelay    time.Duration
 	maxReconnectDelay time.Duration
 
+	requestHandler *RequestHandler
+
 	ctx    context.Context
 	cancel context.CancelFunc
 	mu     sync.RWMutex
 }
 
-func NewClient(serverAddr, agentID string) *Client {
+func NewClient(serverAddr, agentID, localURL string) *Client {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Client{
 		serverAddr:        serverAddr,
@@ -50,6 +52,7 @@ func NewClient(serverAddr, agentID string) *Client {
 		doneCh:            make(chan struct{}),
 		reconnectDelay:    initialDelay,
 		maxReconnectDelay: maxDelay,
+		requestHandler:    NewRequestHandler(localURL),
 		ctx:               ctx,
 		cancel:            cancel,
 	}
@@ -291,10 +294,37 @@ func (c *Client) processMessage(msg *proto.ProxyMessage) error {
 
 	case proto.MessageType_REQUEST:
 		slog.Debug("REQUEST received", "message_id", msg.Id)
+		go c.handleRequest(msg)
 
 	default:
 		slog.Warn("Unknown message type", "type", msg.Type)
 	}
 
 	return nil
+}
+
+func (c *Client) handleRequest(msg *proto.ProxyMessage) {
+	response, err := c.requestHandler.HandleRequest(msg)
+	if err != nil {
+		slog.Error("Failed to handle request", "error", err, "message_id", msg.Id)
+
+		errorResponse := &proto.ProxyMessage{
+			Id:      msg.Id,
+			Type:    proto.MessageType_RESPONSE,
+			Payload: []byte(err.Error()),
+			Metadata: map[string]string{
+				"status_code": "502",
+				"error":       err.Error(),
+			},
+		}
+
+		if sendErr := c.Send(errorResponse); sendErr != nil {
+			slog.Error("Failed to send error response", "error", sendErr)
+		}
+		return
+	}
+
+	if err := c.Send(response); err != nil {
+		slog.Error("Failed to send response", "error", err, "message_id", msg.Id)
+	}
 }
