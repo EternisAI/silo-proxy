@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frontend Simulator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            width: 100%;
+        }
+        .card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            text-align: center;
+        }
+        .icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 30px;
+        }
+        .info {
+            background: #f7fafc;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e1e8ed;
+        }
+        .info-item:last-child {
+            border-bottom: none;
+        }
+        .label {
+            font-weight: 600;
+            color: #666;
+        }
+        .value {
+            color: #333;
+            font-family: 'Courier New', monospace;
+        }
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin: 10px 5px;
+            transition: transform 0.2s;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        .status {
+            margin-top: 30px;
+            padding: 15px;
+            background: #f0fff4;
+            border: 2px solid #48bb78;
+            border-radius: 8px;
+            color: #22543d;
+            display: none;
+        }
+        .status.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="icon">🎯</div>
+            <h1>Frontend Simulator</h1>
+            <div class="badge">Running via Silo Proxy</div>
+
+            <div class="info">
+                <div class="info-item">
+                    <span class="label">Service:</span>
+                    <span class="value">frontend-simulator</span>
+                </div>
+                <div class="info-item">
+                    <span class="label">Port:</span>
+                    <span class="value">3000</span>
+                </div>
+                <div class="info-item">
+                    <span class="label">Access via:</span>
+                    <span class="value">http://localhost:8080/proxy/agent-1/</span>
+                </div>
+                <div class="info-item">
+                    <span class="label">Timestamp:</span>
+                    <span class="value">{{ timestamp }}</span>
+                </div>
+            </div>
+
+            <button class="btn" onclick="checkStatus()">Check Status</button>
+            <button class="btn" onclick="testPost()">Test POST</button>
+
+            <div class="status" id="status"></div>
+        </div>
+    </div>
+
+    <script>
+        async function checkStatus() {
+            const statusDiv = document.getElementById('status');
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                statusDiv.textContent = '✓ ' + data.message + ' (timestamp: ' + data.timestamp + ')';
+                statusDiv.style.background = '#f0fff4';
+                statusDiv.style.borderColor = '#48bb78';
+                statusDiv.classList.add('show');
+            } catch (error) {
+                statusDiv.textContent = '✗ Error: ' + error.message;
+                statusDiv.style.background = '#fff5f5';
+                statusDiv.style.borderColor = '#f56565';
+                statusDiv.classList.add('show');
+            }
+        }
+
+        async function testPost() {
+            const statusDiv = document.getElementById('status');
+            try {
+                const response = await fetch('/api/data', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({test: 'data', value: 123})
+                });
+                const data = await response.json();
+                statusDiv.textContent = '✓ POST successful! Received: ' + JSON.stringify(data.received);
+                statusDiv.style.background = '#f0fff4';
+                statusDiv.style.borderColor = '#48bb78';
+                statusDiv.classList.add('show');
+            } catch (error) {
+                statusDiv.textContent = '✗ Error: ' + error.message;
+                statusDiv.style.background = '#fff5f5';
+                statusDiv.style.borderColor = '#f56565';
+                statusDiv.classList.add('show');
+            }
+        }
+    </script>
+</body>
+</html>

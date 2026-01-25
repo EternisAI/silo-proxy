@@ -5,3 +5,5 @@ http:
 grpc:
   server_address: localhost:9090
   agent_id: agent-1
+local:
+  service_url: http://localhost:3000

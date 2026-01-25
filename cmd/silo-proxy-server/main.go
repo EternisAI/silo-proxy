@@ -24,7 +24,11 @@ func main() {
 
 	slog.Info("Silo Proxy Server", "version", AppVersion)
 
-	services := &internalhttp.Services{}
+	grpcSrv := grpcserver.NewServer(config.Grpc.Port)
+
+	services := &internalhttp.Services{
+		GrpcServer: grpcSrv,
+	}
 
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
@@ -43,8 +47,6 @@ func main() {
 		Addr:    fmt.Sprintf(":%d", config.Http.Port),
 		Handler: engine,
 	}
-
-	grpcSrv := grpcserver.NewServer(config.Grpc.Port)
 
 	errChan := make(chan error, 2)
 	go func() {

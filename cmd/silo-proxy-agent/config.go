@@ -11,14 +11,19 @@ import (
 )
 
 type Config struct {
-	Log  LogConfig
-	Http http.Config
-	Grpc GrpcConfig
+	Log   LogConfig
+	Http  http.Config
+	Grpc  GrpcConfig
+	Local LocalConfig
 }
 
 type GrpcConfig struct {
 	ServerAddress string `mapstructure:"server_address"`
 	AgentID       string `mapstructure:"agent_id"`
+}
+
+type LocalConfig struct {
+	ServiceURL string `mapstructure:"service_url"`
 }
 
 var config Config
