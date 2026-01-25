@@ -7,7 +7,7 @@ AGENT			:= silo-proxy-agent
 VERSION 		?= v0.1.0
 LDFLAGS 		:= -ldflags "-X main.AppVersion=$(VERSION)"
 
-.PHONY: all build build-server build-agent clean test generate docker protoc protoc-gen
+.PHONY: all build build-server build-agent clean test generate docker protoc protoc-gen run run-agent
 
 all: clean build
 
@@ -23,6 +23,8 @@ build-agent:
 	$(GO) build -o bin/$(AGENT) $(LDFLAGS) cmd/$(AGENT)/*.go
 run:
 	$(GO) run $(LDFLAGS) cmd/$(SERVER)/*.go
+run-agent:
+	$(GO) run $(LDFLAGS) cmd/$(AGENT)/*.go
 test:
 	$(GO) test -v ./...
 generate: install

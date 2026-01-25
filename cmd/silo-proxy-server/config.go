@@ -29,6 +29,7 @@ func InitConfig() {
 
 	viper.SetConfigName("application")
 	viper.AddConfigPath(".")
+	viper.AddConfigPath("./cmd/silo-proxy-server")
 	viper.SetConfigType("yaml")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
