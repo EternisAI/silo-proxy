@@ -2,3 +2,5 @@ log:
   level: debug
 http:
   port: 8080
+grpc:
+  port: 9090
