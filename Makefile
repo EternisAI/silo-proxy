@@ -30,7 +30,7 @@ test:
 generate: install
 	sqlc generate
 docker:
-	$(DOCKER) build --build-arg APP=$(SERVER) --build-arg VERSION=$(VERSION) -t $(SERVER):$(VERSION) -t $(SERVER):latest .
+	$(DOCKER) build -f server.Dockerfile --build-arg APP=$(SERVER) --build-arg VERSION=$(VERSION) -t $(SERVER):$(VERSION) -t $(SERVER):latest .
 
 protoc:
 ifeq ($(PROTOC_GEN_GO),)

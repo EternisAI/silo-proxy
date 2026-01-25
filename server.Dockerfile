@@ -11,7 +11,7 @@ ENV GO111MODULE=on  \
 WORKDIR /build
 COPY cmd/${APP}/ ${APP}/
 COPY internal/ internal/
-COPY pkg/ pkg/
+COPY proto/ proto/
 COPY go.mod .
 COPY go.sum .
 RUN go build -o app -ldflags "-X main.AppVersion=${VERSION}" ${APP}/*.go 
