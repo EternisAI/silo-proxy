@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Silo Proxy - Frontend Simulator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            padding: 30px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e1e8ed;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            font-family: 'Courier New', monospace;
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 14px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            width: 100%;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .result-container {
+            display: none;
+            margin-top: 20px;
+        }
+
+        .result-container.show {
+            display: block;
+        }
+
+        .result-section {
+            margin-bottom: 20px;
+        }
+
+        .result-section h3 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+
+        .result-box {
+            background: #f7fafc;
+            border: 2px solid #e1e8ed;
+            border-radius: 8px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            overflow-x: auto;
+        }
+
+        .success {
+            border-color: #48bb78;
+            background: #f0fff4;
+        }
+
+        .error {
+            border-color: #f56565;
+            background: #fff5f5;
+            color: #c53030;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+
+        .status-200 {
+            background: #48bb78;
+            color: white;
+        }
+
+        .status-error {
+            background: #f56565;
+            color: white;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            color: #667eea;
+            margin: 20px 0;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Silo Proxy</h1>
+            <p>Frontend Simulator - Test your proxy requests</p>
+        </div>
+
+        <div class="card">
+            <form id="proxyForm">
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="agentId">Agent ID</label>
+                        <input type="text" id="agentId" name="agent_id" value="agent-1" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="method">HTTP Method</label>
+                        <select id="method" name="method" required>
+                            <option value="GET">GET</option>
+                            <option value="POST">POST</option>
+                            <option value="PUT">PUT</option>
+                            <option value="DELETE">DELETE</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="path">Path (e.g., /test or /api/data)</label>
+                    <input type="text" id="path" name="path" value="/test" required>
+                </div>
+
+                <div class="form-group" id="bodyGroup" style="display: none;">
+                    <label for="body">Request Body (JSON)</label>
+                    <textarea id="body" name="body" placeholder='{"key": "value"}'></textarea>
+                </div>
+
+                <button type="submit" class="btn">Send Request</button>
+            </form>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Sending request...</p>
+            </div>
+
+            <div class="result-container" id="resultContainer">
+                <div class="result-section">
+                    <h3>Request</h3>
+                    <div class="result-box">
+                        <pre id="requestDetails"></pre>
+                    </div>
+                </div>
+
+                <div class="result-section" id="responseSection">
+                    <h3>Response <span id="statusBadge"></span></h3>
+                    <div class="result-box" id="responseBox">
+                        <pre id="responseDetails"></pre>
+                    </div>
+                </div>
+
+                <div class="result-section" id="errorSection" style="display: none;">
+                    <h3>Error</h3>
+                    <div class="result-box error">
+                        <pre id="errorDetails"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('proxyForm');
+        const methodSelect = document.getElementById('method');
+        const bodyGroup = document.getElementById('bodyGroup');
+        const loading = document.getElementById('loading');
+        const resultContainer = document.getElementById('resultContainer');
+
+        methodSelect.addEventListener('change', function() {
+            if (this.value === 'POST' || this.value === 'PUT') {
+                bodyGroup.style.display = 'block';
+            } else {
+                bodyGroup.style.display = 'none';
+            }
+        });
+
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const formData = new FormData(form);
+
+            loading.classList.add('show');
+            resultContainer.classList.remove('show');
+
+            try {
+                const response = await fetch('/api/proxy-request', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                displayResult(result);
+            } catch (error) {
+                displayError(error.message);
+            } finally {
+                loading.classList.remove('show');
+            }
+        });
+
+        function displayResult(result) {
+            document.getElementById('requestDetails').textContent = JSON.stringify(result.request, null, 2);
+
+            if (result.error) {
+                document.getElementById('errorSection').style.display = 'block';
+                document.getElementById('responseSection').style.display = 'none';
+                document.getElementById('errorDetails').textContent = result.error;
+            } else {
+                document.getElementById('errorSection').style.display = 'none';
+                document.getElementById('responseSection').style.display = 'block';
+
+                const statusCode = result.response.status_code;
+                const statusBadge = document.getElementById('statusBadge');
+                statusBadge.textContent = statusCode;
+                statusBadge.className = 'status-badge ' + (statusCode === 200 ? 'status-200' : 'status-error');
+
+                const responseBox = document.getElementById('responseBox');
+                responseBox.className = 'result-box ' + (statusCode === 200 ? 'success' : 'error');
+
+                const responseData = {
+                    status_code: result.response.status_code,
+                    elapsed_ms: result.response.elapsed_ms.toFixed(2) + 'ms',
+                    body: result.response.body
+                };
+
+                document.getElementById('responseDetails').textContent = JSON.stringify(responseData, null, 2);
+            }
+
+            resultContainer.classList.add('show');
+        }
+
+        function displayError(message) {
+            document.getElementById('errorSection').style.display = 'block';
+            document.getElementById('responseSection').style.display = 'none';
+            document.getElementById('errorDetails').textContent = message;
+            resultContainer.classList.add('show');
+        }
+    </script>
+</body>
+</html>
