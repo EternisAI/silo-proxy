@@ -131,14 +131,20 @@ make run-agent
 ### 3. Start Local Service
 
 ```bash
-cd nextjs/frontend-simulator && ./run-proxy.sh
+cd nextjs/frontend-simulator && ./run.sh
 # Service runs on :3000
 ```
 
 ### 4. Access via Proxy
 
 ```bash
-# User accesses through server
+# Root path - routes to default agent (agent-1)
+curl http://localhost:8080/
+
+# Specific endpoint
+curl http://localhost:8080/api/status
+
+# Or use multi-agent routing
 curl http://localhost:8080/proxy/agent-1/api/status
 
 # Request flows: User → Server → Agent → Local Service → Agent → Server → User
@@ -148,10 +154,23 @@ curl http://localhost:8080/proxy/agent-1/api/status
 
 - ✅ **Zero Configuration**: No port forwarding, no VPN, no static IP needed
 - ✅ **NAT Traversal**: Works through any router/firewall automatically
+- ✅ **Transparent Proxy**: No BASE_PATH or source code changes needed for Next.js apps
 - ✅ **Auto Reconnect**: Exponential backoff (1s → 30s) if connection drops
 - ✅ **Keep-Alive**: PING/PONG every 30s to detect dead connections
 - ✅ **Graceful Shutdown**: Coordinated cleanup on termination
 - ✅ **Low Latency**: ~1ms average overhead for request forwarding
+
+## Routing Modes
+
+**Root Path Routing** (Default):
+- All requests to `http://localhost:8080/` automatically route to `agent-1`
+- Direct transparent passthrough - no path manipulation
+- Perfect for single-app deployments
+
+**Multi-Agent Routing**:
+- Access specific agents: `http://localhost:8080/proxy/:agent_id/*path`
+- Strips `/proxy/:agent_id` prefix before forwarding to the backend
+- Useful when hosting multiple services behind different agents
 
 ## Configuration
 
@@ -173,6 +192,11 @@ grpc:
 local:
   service_url: "http://localhost:3000"
 ```
+
+**Next.js Apps**:
+- No BASE_PATH configuration required
+- Run apps normally without any proxy-specific settings
+- The proxy handles all path routing transparently
 
 ## Message Types
 

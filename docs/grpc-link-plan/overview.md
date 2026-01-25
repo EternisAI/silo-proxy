@@ -90,23 +90,31 @@ make run-agent  # Connects to server, forwards to :3000
 
 ### 3. Start Frontend Simulator (local service)
 ```bash
-cd nextjs/frontend-simulator && ./run-proxy.sh  # Runs on :3000 with proxy basePath
+cd nextjs/frontend-simulator && ./run.sh  # Runs on :3000
 ```
 
 ### 4. Access via Proxy
 Open browser to:
+```
+http://localhost:8080/
+```
+
+Or use multi-agent routing:
 ```
 http://localhost:8080/proxy/agent-1/
 ```
 
 ### Test with curl
 ```bash
-# GET
+# Root path (routes to agent-1)
+curl http://localhost:8080/api/status
+
+# Or use multi-agent routing
 curl http://localhost:8080/proxy/agent-1/api/status
 
 # POST
 curl -X POST -H "Content-Type: application/json" \
-  -d '{"test":"data"}' http://localhost:8080/proxy/agent-1/api/data
+  -d '{"test":"data"}' http://localhost:8080/api/data
 ```
 
 ## Next Steps
