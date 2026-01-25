@@ -7,7 +7,7 @@ AGENT			:= silo-proxy-agent
 VERSION 		?= v0.1.0
 LDFLAGS 		:= -ldflags "-X main.AppVersion=$(VERSION)"
 
-.PHONY: all build build-server build-agent clean test generate docker protoc protoc-gen run run-agent
+.PHONY: all build build-server build-agent clean test generate docker docker-server docker-agent docker-all protoc protoc-gen run run-agent
 
 all: clean build
 
@@ -29,8 +29,12 @@ test:
 	$(GO) test -v ./...
 generate: install
 	sqlc generate
-docker:
+docker: docker-server
+docker-server:
 	$(DOCKER) build -f server.Dockerfile --build-arg APP=$(SERVER) --build-arg VERSION=$(VERSION) -t $(SERVER):$(VERSION) -t $(SERVER):latest .
+docker-agent:
+	$(DOCKER) build -f agent.Dockerfile --build-arg APP=$(AGENT) --build-arg VERSION=$(VERSION) -t $(AGENT):$(VERSION) -t $(AGENT):latest .
+docker-all: docker-server docker-agent
 
 protoc:
 ifeq ($(PROTOC_GEN_GO),)
