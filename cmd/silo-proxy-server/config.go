@@ -13,6 +13,11 @@ import (
 type Config struct {
 	Log  LogConfig
 	Http http.Config
+	Grpc GrpcConfig
+}
+
+type GrpcConfig struct {
+	Port int `mapstructure:"port"`
 }
 
 var config Config
