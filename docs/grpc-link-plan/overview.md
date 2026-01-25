@@ -69,10 +69,49 @@ grpc:
 - Coordinated shutdown of HTTP and gRPC
 - 10-second timeout for graceful shutdown
 
-### Next Steps
-
-🔲 **Phase 5: Request Forwarding**
+✅ **Request Forwarding**
 - HTTP request → gRPC REQUEST message
 - Forward to agent via stream
 - Agent forwards to local service
 - Return HTTP response to user
+- Average latency: ~1ms
+
+## Usage
+
+### Server
+```bash
+make run
+# Server starts on:
+# - HTTP: http://localhost:8080
+# - gRPC: localhost:9090
+```
+
+### Agent
+```bash
+make run-agent
+# Agent connects to server and forwards requests to http://localhost:3000
+```
+
+### Making Requests
+```bash
+# GET request
+curl http://localhost:8080/proxy/agent-1/test
+
+# POST request with JSON
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"key":"value"}' \
+  http://localhost:8080/proxy/agent-1/api/endpoint
+
+# With query parameters
+curl "http://localhost:8080/proxy/agent-1/search?q=test&limit=10"
+```
+
+## Next Steps
+
+Potential enhancements:
+- TLS/mTLS for secure communication
+- Authentication and authorization
+- Request/response compression
+- Metrics and monitoring
+- Multiple agent support with load balancing
+- WebSocket support
