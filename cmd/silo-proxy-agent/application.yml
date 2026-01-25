@@ -2,3 +2,6 @@ log:
   level: debug
 http:
   port: 8081
+grpc:
+  server_address: localhost:9090
+  agent_id: agent-1
