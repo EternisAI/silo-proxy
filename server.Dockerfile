@@ -19,7 +19,7 @@ RUN go build -o app -ldflags "-X main.AppVersion=${VERSION}" ${APP}/*.go
 
 FROM alpine
 
-ARG APP
+ARG APP=silo-proxy-server
 
 WORKDIR /go/bin
 COPY cmd/${APP}/application.yml /go/bin/application.yml
