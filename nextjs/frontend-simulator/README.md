@@ -12,17 +12,23 @@ A simple Next.js application used for testing the silo-proxy gRPC forwarding fun
 
 ## Running
 
+### For Local Development (Standalone)
+
 ```bash
 ./run.sh
 ```
 
-Or manually:
+The server will start on http://localhost:3000
+
+### For Use with Silo-Proxy
 
 ```bash
-npm run dev
+./run-proxy.sh
 ```
 
-The server will start on http://localhost:3000
+This configures the app with the `/proxy/agent-1` base path, so all assets load correctly through the proxy.
+- Direct access: http://localhost:3000/proxy/agent-1/
+- Via proxy: http://localhost:8080/proxy/agent-1/
 
 ## Testing
 

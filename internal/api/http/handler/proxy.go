@@ -50,6 +50,7 @@ func (h *ProxyHandler) ProxyRequest(c *gin.Context) {
 	}
 
 	targetPath := c.Param("path")
+	fullPath := "/proxy/" + agentID + targetPath
 
 	requestMsg := &proto.ProxyMessage{
 		Id:      uuid.New().String(),
@@ -57,7 +58,7 @@ func (h *ProxyHandler) ProxyRequest(c *gin.Context) {
 		Payload: body,
 		Metadata: map[string]string{
 			"method":       c.Request.Method,
-			"path":         targetPath,
+			"path":         fullPath,
 			"query":        c.Request.URL.RawQuery,
 			"content_type": c.ContentType(),
 		},

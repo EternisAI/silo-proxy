@@ -90,7 +90,7 @@ make run-agent  # Connects to server, forwards to :3000
 
 ### 3. Start Frontend Simulator (local service)
 ```bash
-cd nextjs/frontend-simulator && ./run.sh  # Runs on :3000
+cd nextjs/frontend-simulator && ./run-proxy.sh  # Runs on :3000 with proxy basePath
 ```
 
 ### 4. Access via Proxy
