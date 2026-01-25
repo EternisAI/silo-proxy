@@ -22,6 +22,10 @@ func NewProxyHandler(grpcServer *server.Server) *ProxyHandler {
 	}
 }
 
+func (h *ProxyHandler) ProxyRootRequest(c *gin.Context) {
+	h.forwardRequest(c, "agent-1", c.Request.URL.Path)
+}
+
 func (h *ProxyHandler) ProxyRequest(c *gin.Context) {
 	agentID := c.Param("agent_id")
 	if agentID == "" {
@@ -29,6 +33,11 @@ func (h *ProxyHandler) ProxyRequest(c *gin.Context) {
 		return
 	}
 
+	targetPath := c.Param("path")
+	h.forwardRequest(c, agentID, targetPath)
+}
+
+func (h *ProxyHandler) forwardRequest(c *gin.Context, agentID, targetPath string) {
 	conn, ok := h.grpcServer.GetConnectionManager().GetConnection(agentID)
 	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{"error": "agent not found"})
@@ -49,16 +58,13 @@ func (h *ProxyHandler) ProxyRequest(c *gin.Context) {
 		}
 	}
 
-	targetPath := c.Param("path")
-	fullPath := "/proxy/" + agentID + targetPath
-
 	requestMsg := &proto.ProxyMessage{
 		Id:      uuid.New().String(),
 		Type:    proto.MessageType_REQUEST,
 		Payload: body,
 		Metadata: map[string]string{
 			"method":       c.Request.Method,
-			"path":         fullPath,
+			"path":         targetPath,
 			"query":        c.Request.URL.RawQuery,
 			"content_type": c.ContentType(),
 		},

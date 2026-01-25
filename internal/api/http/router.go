@@ -23,6 +23,9 @@ func SetupRoute(engine *gin.Engine, srvs *Services) {
 
 	if srvs.GrpcServer != nil {
 		proxyHandler := handler.NewProxyHandler(srvs.GrpcServer)
+		// Specific agent routing with prefix
 		engine.Any("/proxy/:agent_id/*path", proxyHandler.ProxyRequest)
+		// Catch-all: route everything else to default agent (agent-1)
+		engine.NoRoute(proxyHandler.ProxyRootRequest)
 	}
 }
