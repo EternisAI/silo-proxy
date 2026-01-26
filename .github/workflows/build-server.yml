@@ -13,6 +13,7 @@ on:
 
 jobs:
   build-server:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -69,6 +70,7 @@ jobs:
             VERSION=${{ github.ref_name }}
 
   build-agent:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
