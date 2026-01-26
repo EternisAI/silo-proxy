@@ -30,6 +30,7 @@ func (h *ProxyHandler) ProxyRootRequest(c *gin.Context) {
 
 	if subdomainAgentID, exists := c.Get(middleware.SubdomainAgentIDKey); exists {
 		if id, ok := subdomainAgentID.(string); ok && id != "" {
+			slog.Debug("Subdomain Routing", "agentID", id)
 			agentID = id
 		}
 	}
