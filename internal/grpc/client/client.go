@@ -195,6 +195,7 @@ func (c *Client) handleStream() error {
 
 	err := <-errChan
 	close(done)
+	slog.Info("Stream ended", "error", err)
 	return err
 }
 

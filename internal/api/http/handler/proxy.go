@@ -1,11 +1,14 @@
 package handler
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
+	"github.com/EternisAI/silo-proxy/internal/api/http/middleware"
 	"github.com/EternisAI/silo-proxy/internal/grpc/server"
 	"github.com/EternisAI/silo-proxy/proto"
 	"github.com/gin-gonic/gin"
@@ -23,7 +26,15 @@ func NewProxyHandler(grpcServer *server.Server) *ProxyHandler {
 }
 
 func (h *ProxyHandler) ProxyRootRequest(c *gin.Context) {
-	h.forwardRequest(c, "agent-1", c.Request.URL.Path)
+	agentID := "agent-1"
+
+	if subdomainAgentID, exists := c.Get(middleware.SubdomainAgentIDKey); exists {
+		if id, ok := subdomainAgentID.(string); ok && id != "" {
+			agentID = id
+		}
+	}
+
+	h.forwardRequestWithRewrite(c, agentID, c.Request.URL.Path, "")
 }
 
 func (h *ProxyHandler) ProxyRequest(c *gin.Context) {
@@ -34,10 +45,11 @@ func (h *ProxyHandler) ProxyRequest(c *gin.Context) {
 	}
 
 	targetPath := c.Param("path")
-	h.forwardRequest(c, agentID, targetPath)
+	basePathPrefix := fmt.Sprintf("/proxy/%s", agentID)
+	h.forwardRequestWithRewrite(c, agentID, targetPath, basePathPrefix)
 }
 
-func (h *ProxyHandler) forwardRequest(c *gin.Context, agentID, targetPath string) {
+func (h *ProxyHandler) forwardRequestWithRewrite(c *gin.Context, agentID, targetPath, basePathPrefix string) {
 	conn, ok := h.grpcServer.GetConnectionManager().GetConnection(agentID)
 	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{"error": "agent not found"})
@@ -109,6 +121,39 @@ func (h *ProxyHandler) forwardRequest(c *gin.Context, agentID, targetPath string
 		"message_id", response.Id,
 		"status_code", statusCode)
 
+	payload := response.Payload
+
+	if basePathPrefix != "" && isHTMLResponse(response.Metadata) {
+		payload = rewriteHTMLPaths(response.Payload, basePathPrefix)
+		slog.Debug("HTML response rewritten", "agent_id", agentID, "base_path", basePathPrefix)
+	}
+
 	c.Status(statusCode)
-	c.Writer.Write(response.Payload)
+	c.Writer.Write(payload)
+}
+
+func isHTMLResponse(metadata map[string]string) bool {
+	contentType := ""
+	for key, value := range metadata {
+		if strings.ToLower(key) == "header_content-type" || strings.ToLower(key) == "content_type" {
+			contentType = strings.ToLower(value)
+			break
+		}
+	}
+	return strings.Contains(contentType, "text/html")
+}
+
+func rewriteHTMLPaths(htmlBytes []byte, basePathPrefix string) []byte {
+	html := string(htmlBytes)
+
+	baseTag := fmt.Sprintf("<base href=\"%s/\">", basePathPrefix)
+	if strings.Contains(html, "<head>") {
+		html = strings.Replace(html, "<head>", "<head>"+baseTag, 1)
+	} else if strings.Contains(html, "<HEAD>") {
+		html = strings.Replace(html, "<HEAD>", "<HEAD>"+baseTag, 1)
+	} else {
+		return htmlBytes
+	}
+
+	return []byte(html)
 }

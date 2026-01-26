@@ -16,6 +16,7 @@ type Services struct {
 }
 
 func SetupRoute(engine *gin.Engine, srvs *Services) {
+	engine.Use(middleware.SubdomainExtractor())
 	engine.Use(middleware.RequestLogger())
 
 	healthHandler := handler.NewHealthHandler()
@@ -25,7 +26,7 @@ func SetupRoute(engine *gin.Engine, srvs *Services) {
 		proxyHandler := handler.NewProxyHandler(srvs.GrpcServer)
 		// Specific agent routing with prefix
 		engine.Any("/proxy/:agent_id/*path", proxyHandler.ProxyRequest)
-		// Catch-all: route everything else to default agent (agent-1)
+		// Catch-all: route everything else to subdomain agent or default agent (agent-1)
 		engine.NoRoute(proxyHandler.ProxyRootRequest)
 	}
 }
