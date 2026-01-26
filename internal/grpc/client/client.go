@@ -14,8 +14,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-const LevelTrace = slog.Level(-8)
-
 const (
 	sendChannelBuffer = 100
 	pingInterval      = 30 * time.Second
@@ -284,7 +282,7 @@ func (c *Client) pingLoop(done chan struct{}, errChan chan error) {
 				return
 			}
 
-			slog.Log(context.Background(), LevelTrace, "PING sent", "message_id", ping.Id)
+			slog.Debug("PING sent", "message_id", ping.Id)
 		}
 	}
 }
@@ -292,7 +290,7 @@ func (c *Client) pingLoop(done chan struct{}, errChan chan error) {
 func (c *Client) processMessage(msg *proto.ProxyMessage) error {
 	switch msg.Type {
 	case proto.MessageType_PONG:
-		slog.Log(context.Background(), LevelTrace, "PONG received", "message_id", msg.Id)
+		slog.Debug("PONG received", "message_id", msg.Id)
 
 	case proto.MessageType_REQUEST:
 		slog.Debug("REQUEST received", "message_id", msg.Id)

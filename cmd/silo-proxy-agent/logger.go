@@ -13,10 +13,7 @@ const (
 	LOG_LEVEL_WARNING = "WARNING"
 	LOG_LEVEL_INFO    = "INFO"
 	LOG_LEVEL_DEBUG   = "DEBUG"
-	LOG_LEVEL_TRACE   = "TRACE"
 )
-
-const LevelTrace = slog.Level(-8)
 
 type LogConfig struct {
 	Level string
@@ -34,8 +31,6 @@ func initLogger(logLevel string) {
 		level = slog.LevelInfo
 	case LOG_LEVEL_DEBUG:
 		level = slog.LevelDebug
-	case LOG_LEVEL_TRACE:
-		level = LevelTrace
 	default:
 		level = slog.LevelInfo
 	}
