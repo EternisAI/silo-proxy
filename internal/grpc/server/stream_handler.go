@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -8,6 +9,8 @@ import (
 	"github.com/EternisAI/silo-proxy/proto"
 	"github.com/google/uuid"
 )
+
+const LevelTrace = slog.Level(-8)
 
 type StreamHandler struct {
 	connManager *ConnectionManager
@@ -119,7 +122,7 @@ func (sh *StreamHandler) sendLoop(agentID string, stream proto.ProxyService_Stre
 func (sh *StreamHandler) processMessage(agentID string, msg *proto.ProxyMessage) error {
 	switch msg.Type {
 	case proto.MessageType_PING:
-		slog.Debug("PING received", "agent_id", agentID, "message_id", msg.Id)
+		slog.Log(context.Background(), LevelTrace, "PING received", "agent_id", agentID, "message_id", msg.Id)
 
 		pong := &proto.ProxyMessage{
 			Id:       uuid.New().String(),
@@ -131,7 +134,7 @@ func (sh *StreamHandler) processMessage(agentID string, msg *proto.ProxyMessage)
 			return fmt.Errorf("failed to send PONG: %w", err)
 		}
 
-		slog.Debug("PONG sent", "agent_id", agentID, "message_id", pong.Id)
+		slog.Log(context.Background(), LevelTrace, "PONG sent", "agent_id", agentID, "message_id", pong.Id)
 
 	case proto.MessageType_RESPONSE:
 		slog.Debug("RESPONSE received", "agent_id", agentID, "message_id", msg.Id)
