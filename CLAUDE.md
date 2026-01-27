@@ -225,6 +225,10 @@ Both server and agent coordinate shutdown:
 
 ## Development Guidelines
 
+### Build and Test Commands
+- Prefer `make` commands for full builds and test runs (e.g., `make build`, `make test`)
+- Direct `go` commands are acceptable when it makes sense (e.g., `go test ./internal/specific/package -v` for targeted testing, `go build ./...` for quick validation)
+
 ### When Modifying gRPC Protocol
 1. Edit `proto/proxy.proto`
 2. Run `make protoc-gen` to regenerate Go code

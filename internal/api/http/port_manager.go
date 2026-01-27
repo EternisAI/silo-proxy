@@ -3,6 +3,7 @@ package http
 import (
 	"fmt"
 	"log/slog"
+	"maps"
 	"sync"
 )
 
@@ -110,9 +111,7 @@ func (pm *PortManager) GetAllocations() map[int]string {
 
 	// Return a copy to prevent external modification
 	allocations := make(map[int]string, len(pm.allocatedPorts))
-	for port, agentID := range pm.allocatedPorts {
-		allocations[port] = agentID
-	}
+	maps.Copy(allocations, pm.allocatedPorts)
 
 	return allocations
 }
