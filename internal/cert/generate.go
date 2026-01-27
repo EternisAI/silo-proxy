@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-func generateServerCert(caCert *x509.Certificate, caKey *rsa.PrivateKey, domainNames []string, ipAddresses []net.IP) (*x509.Certificate, *rsa.PrivateKey, error) {
+func (s *Service) GenerateServerCert(caCert *x509.Certificate, caKey *rsa.PrivateKey, domainNames []string, ipAddresses []net.IP) (*x509.Certificate, *rsa.PrivateKey, error) {
 	serverKey, err := rsa.GenerateKey(rand.Reader, 4096)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to generate server key: %w", err)

@@ -108,7 +108,7 @@ func (s *Service) ensureCertificates() error {
 			"domains", s.DomainNames,
 			"ips", s.IPAddresses)
 
-		serverCert, serverKey, err := generateServerCert(caCert, caKey, s.DomainNames, s.IPAddresses)
+		serverCert, serverKey, err := s.GenerateServerCert(caCert, caKey, s.DomainNames, s.IPAddresses)
 		if err != nil {
 			slog.Error("Failed to generate server certificate", "error", err)
 			return fmt.Errorf("failed to generate server certificate: %w", err)
