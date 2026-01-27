@@ -7,16 +7,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type Config struct {
-	Port           uint
-	AgentPortRange PortRange
-}
-
-type PortRange struct {
-	Start int
-	End   int
-}
-
 type Services struct {
 	GrpcServer *grpcserver.Server
 }
