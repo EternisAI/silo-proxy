@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 
 	"github.com/EternisAI/silo-proxy/internal/api/http/dto"
 	"github.com/EternisAI/silo-proxy/internal/cert"
@@ -124,4 +125,57 @@ func (h *CertHandler) ProvisionAgent(ctx *gin.Context) {
 	ctx.Data(http.StatusOK, "application/zip", zipBuffer.Bytes())
 
 	slog.Info("Agent certificates provisioned successfully", "agent_id", req.AgentID, "zip_size", zipBuffer.Len())
+}
+
+func (h *CertHandler) DeleteServerCerts(ctx *gin.Context) {
+	if h.certService == nil {
+		slog.Warn("Server cert deletion requested but TLS is disabled")
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": "TLS is not enabled on this server",
+		})
+		return
+	}
+
+	slog.Info("Deleting all server certificates")
+
+	certPaths := []string{
+		h.certService.CaCertPath,
+		h.certService.CaKeyPath,
+		h.certService.ServerCertPath,
+		h.certService.ServerKeyPath,
+	}
+
+	deletedFiles := []string{}
+	var errors []string
+
+	for _, path := range certPaths {
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			slog.Debug("Certificate file does not exist, skipping", "path", path)
+			continue
+		}
+
+		if err := os.Remove(path); err != nil {
+			slog.Error("Failed to delete certificate file", "error", err, "path", path)
+			errors = append(errors, fmt.Sprintf("%s: %v", path, err))
+		} else {
+			slog.Info("Deleted certificate file", "path", path)
+			deletedFiles = append(deletedFiles, path)
+		}
+	}
+
+	if len(errors) > 0 {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"error":         "Failed to delete some certificate files",
+			"deleted_files": deletedFiles,
+			"errors":        errors,
+		})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"message":       "Successfully deleted server certificates",
+		"deleted_files": deletedFiles,
+	})
+
+	slog.Info("Server certificates deleted successfully", "count", len(deletedFiles))
 }

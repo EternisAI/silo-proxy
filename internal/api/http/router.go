@@ -26,4 +26,5 @@ func SetupRoute(engine *gin.Engine, srvs *Services) {
 
 	certHandler := handler.NewCertHandler(srvs.CertService)
 	engine.POST("/cert/agent", certHandler.ProvisionAgent)
+	engine.DELETE("/cert/server", certHandler.DeleteServerCerts)
 }
