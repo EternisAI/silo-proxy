@@ -3,9 +3,6 @@ package handler
 import (
 	"archive/zip"
 	"bytes"
-	"crypto/rsa"
-	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -72,7 +69,7 @@ func (h *CertHandler) ProvisionAgent(ctx *gin.Context) {
 	zipBuffer := new(bytes.Buffer)
 	zipWriter := zip.NewWriter(zipBuffer)
 
-	agentCertPEM, err := certToPEM(agentCert)
+	agentCertPEM, err := cert.CertToPEM(agentCert)
 	if err != nil {
 		slog.Error("Failed to encode agent certificate", "error", err, "agent_id", req.AgentID)
 		ctx.JSON(http.StatusInternalServerError, gin.H{
@@ -81,7 +78,7 @@ func (h *CertHandler) ProvisionAgent(ctx *gin.Context) {
 		return
 	}
 
-	agentKeyPEM, err := keyToPEM(agentKey)
+	agentKeyPEM, err := cert.KeyToPEM(agentKey)
 	if err != nil {
 		slog.Error("Failed to encode agent key", "error", err, "agent_id", req.AgentID)
 		ctx.JSON(http.StatusInternalServerError, gin.H{
@@ -127,26 +124,4 @@ func (h *CertHandler) ProvisionAgent(ctx *gin.Context) {
 	ctx.Data(http.StatusOK, "application/zip", zipBuffer.Bytes())
 
 	slog.Info("Agent certificates provisioned successfully", "agent_id", req.AgentID, "zip_size", zipBuffer.Len())
-}
-
-func certToPEM(cert *x509.Certificate) ([]byte, error) {
-	var buf bytes.Buffer
-	if err := pem.Encode(&buf, &pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: cert.Raw,
-	}); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
-
-func keyToPEM(key *rsa.PrivateKey) ([]byte, error) {
-	var buf bytes.Buffer
-	if err := pem.Encode(&buf, &pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(key),
-	}); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
 }

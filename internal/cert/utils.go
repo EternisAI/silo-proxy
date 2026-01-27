@@ -1,6 +1,7 @@
 package cert
 
 import (
+	"bytes"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
@@ -47,40 +48,54 @@ func loadCA(certPath, keyPath string) (*x509.Certificate, *rsa.PrivateKey, error
 	return caCert, caKey, nil
 }
 
-func writeCertToFile(cert *x509.Certificate, path string) error {
-	certFile, err := os.Create(path)
-	if err != nil {
-		return fmt.Errorf("failed to create certificate file: %w", err)
-	}
-	defer certFile.Close()
-
-	if err := pem.Encode(certFile, &pem.Block{
+func CertToPEM(cert *x509.Certificate) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := pem.Encode(&buf, &pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: cert.Raw,
 	}); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func KeyToPEM(key *rsa.PrivateKey) ([]byte, error) {
+	keyBytes, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		return nil, err
+	}
+
+	var buf bytes.Buffer
+	if err := pem.Encode(&buf, &pem.Block{
+		Type:  "PRIVATE KEY",
+		Bytes: keyBytes,
+	}); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func writeCertToFile(cert *x509.Certificate, path string) error {
+	pemBytes, err := CertToPEM(cert)
+	if err != nil {
 		return fmt.Errorf("failed to encode certificate: %w", err)
+	}
+
+	if err := os.WriteFile(path, pemBytes, 0644); err != nil {
+		return fmt.Errorf("failed to write certificate file: %w", err)
 	}
 
 	return nil
 }
 
 func writeKeyToFile(key *rsa.PrivateKey, path string) error {
-	keyFile, err := os.Create(path)
+	pemBytes, err := KeyToPEM(key)
 	if err != nil {
-		return fmt.Errorf("failed to create key file: %w", err)
-	}
-	defer keyFile.Close()
-
-	keyBytes, err := x509.MarshalPKCS8PrivateKey(key)
-	if err != nil {
-		return fmt.Errorf("failed to marshal key: %w", err)
-	}
-
-	if err := pem.Encode(keyFile, &pem.Block{
-		Type:  "PRIVATE KEY",
-		Bytes: keyBytes,
-	}); err != nil {
 		return fmt.Errorf("failed to encode key: %w", err)
+	}
+
+	if err := os.WriteFile(path, pemBytes, 0600); err != nil {
+		return fmt.Errorf("failed to write key file: %w", err)
 	}
 
 	return nil
