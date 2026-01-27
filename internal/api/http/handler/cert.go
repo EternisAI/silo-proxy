@@ -69,7 +69,6 @@ func (h *CertHandler) ProvisionAgent(ctx *gin.Context) {
 
 	zipBuffer := new(bytes.Buffer)
 	zipWriter := zip.NewWriter(zipBuffer)
-	defer zipWriter.Close()
 
 	agentCertPEM, err := cert.CertToPEM(agentCert)
 	if err != nil {
@@ -111,6 +110,14 @@ func (h *CertHandler) ProvisionAgent(ctx *gin.Context) {
 			})
 			return
 		}
+	}
+
+	if err := zipWriter.Close(); err != nil {
+		slog.Error("Failed to close zip writer", "error", err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to finalize zip file",
+		})
+		return
 	}
 
 	ctx.Header("Content-Type", "application/zip")
