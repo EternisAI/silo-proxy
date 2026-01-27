@@ -26,6 +26,7 @@ type TLSConfig struct {
 	CertFile    string `mapstructure:"cert_file"`
 	KeyFile     string `mapstructure:"key_file"`
 	CAFile      string `mapstructure:"ca_file"`
+	CAKeyFile   string `mapstructure:"ca_key_file"`
 	ClientAuth  string `mapstructure:"client_auth"`
 	DomainNames string `mapstructure:"domain_names"`
 	IPAddresses string `mapstructure:"ip_addresses"`

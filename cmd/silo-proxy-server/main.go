@@ -57,7 +57,7 @@ func main() {
 		var err error
 		certService, err = cert.New(
 			config.Grpc.TLS.CAFile,
-			"./certs/ca/ca-key.pem",
+			config.Grpc.TLS.CAKeyFile,
 			config.Grpc.TLS.CertFile,
 			config.Grpc.TLS.KeyFile,
 			certOpts,
