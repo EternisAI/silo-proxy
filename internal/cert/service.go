@@ -20,14 +20,34 @@ type Service struct {
 	CaKeyPath      string
 	ServerCertPath string
 	ServerKeyPath  string
+	DomainNames    []string
+	IPAddresses    []net.IP
 }
 
-func New(caCertPath, caKeyPath, serverCertPath, serverKeyPath string) (*Service, error) {
+type Options struct {
+	DomainNames []string
+	IPAddresses []net.IP
+}
+
+func New(caCertPath, caKeyPath, serverCertPath, serverKeyPath string, opts *Options) (*Service, error) {
 	s := &Service{
 		CaCertPath:     caCertPath,
 		CaKeyPath:      caKeyPath,
 		ServerCertPath: serverCertPath,
 		ServerKeyPath:  serverKeyPath,
+	}
+
+	if opts != nil {
+		s.DomainNames = opts.DomainNames
+		s.IPAddresses = opts.IPAddresses
+	}
+
+	if len(s.DomainNames) == 0 {
+		s.DomainNames = []string{"localhost"}
+	}
+
+	if len(s.IPAddresses) == 0 {
+		s.IPAddresses = []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")}
 	}
 
 	if err := s.ensureCertificates(); err != nil {
@@ -88,9 +108,12 @@ func (s *Service) ensureCertificates() error {
 	serverKeyExists := fileExists(s.ServerKeyPath)
 
 	if !serverCertExists || !serverKeyExists {
-		slog.Info("Server certificate not found, generating new server certificate", "cert_path", s.ServerCertPath)
+		slog.Info("Server certificate not found, generating new server certificate",
+			"cert_path", s.ServerCertPath,
+			"domains", s.DomainNames,
+			"ips", s.IPAddresses)
 
-		serverCert, serverKey, err := generateServerCert(caCert, caKey)
+		serverCert, serverKey, err := generateServerCert(caCert, caKey, s.DomainNames, s.IPAddresses)
 		if err != nil {
 			slog.Error("Failed to generate server certificate", "error", err)
 			return fmt.Errorf("failed to generate server certificate: %w", err)
@@ -170,7 +193,7 @@ func generateCA() (*x509.Certificate, *rsa.PrivateKey, error) {
 	return caCert, caKey, nil
 }
 
-func generateServerCert(caCert *x509.Certificate, caKey *rsa.PrivateKey) (*x509.Certificate, *rsa.PrivateKey, error) {
+func generateServerCert(caCert *x509.Certificate, caKey *rsa.PrivateKey, domainNames []string, ipAddresses []net.IP) (*x509.Certificate, *rsa.PrivateKey, error) {
 	serverKey, err := rsa.GenerateKey(rand.Reader, 4096)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to generate server key: %w", err)
@@ -181,19 +204,24 @@ func generateServerCert(caCert *x509.Certificate, caKey *rsa.PrivateKey) (*x509.
 		return nil, nil, fmt.Errorf("failed to generate serial number: %w", err)
 	}
 
+	commonName := "localhost"
+	if len(domainNames) > 0 {
+		commonName = domainNames[0]
+	}
+
 	serverTemplate := &x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
 			Organization: []string{"Silo Proxy"},
-			CommonName:   "localhost",
+			CommonName:   commonName,
 		},
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
-		DNSNames:              []string{"localhost"},
-		IPAddresses:           []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")},
+		DNSNames:              domainNames,
+		IPAddresses:           ipAddresses,
 	}
 
 	serverCertBytes, err := x509.CreateCertificate(rand.Reader, serverTemplate, caCert, &serverKey.PublicKey, caKey)

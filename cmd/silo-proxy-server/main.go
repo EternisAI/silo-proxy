@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	internalhttp "github.com/EternisAI/silo-proxy/internal/api/http"
+	"github.com/EternisAI/silo-proxy/internal/cert"
 	grpcserver "github.com/EternisAI/silo-proxy/internal/grpc/server"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -30,6 +32,36 @@ func main() {
 		KeyFile:    config.Grpc.TLS.KeyFile,
 		CAFile:     config.Grpc.TLS.CAFile,
 		ClientAuth: config.Grpc.TLS.ClientAuth,
+	}
+
+	if config.Grpc.TLS.Enabled {
+		certOpts := &cert.Options{}
+
+		if len(config.Grpc.TLS.DomainNames) > 0 {
+			certOpts.DomainNames = config.Grpc.TLS.DomainNames
+		}
+
+		if len(config.Grpc.TLS.IPAddresses) > 0 {
+			for _, ipStr := range config.Grpc.TLS.IPAddresses {
+				if ip := net.ParseIP(ipStr); ip != nil {
+					certOpts.IPAddresses = append(certOpts.IPAddresses, ip)
+				} else {
+					slog.Warn("Invalid IP address in configuration, skipping", "ip", ipStr)
+				}
+			}
+		}
+
+		_, err := cert.New(
+			config.Grpc.TLS.CAFile,
+			"./certs/ca/ca-key.pem",
+			config.Grpc.TLS.CertFile,
+			config.Grpc.TLS.KeyFile,
+			certOpts,
+		)
+		if err != nil {
+			slog.Error("Failed to initialize certificates", "error", err)
+			os.Exit(1)
+		}
 	}
 
 	grpcSrv := grpcserver.NewServer(config.Grpc.Port, tlsConfig)
