@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -74,33 +75,40 @@ func (asm *AgentServerManager) StartAgentServer(agentID string) (int, error) {
 			return 0, fmt.Errorf("failed to allocate port: %w", err)
 		}
 
-		// Create server
+		// Try to bind the port synchronously to verify it's available
+		listener, err := net.Listen("tcp", fmt.Sprintf(":%d", allocatedPort))
+		if err != nil {
+			// Binding failed, release port and retry
+			asm.portManager.Release(allocatedPort)
+			lastErr = fmt.Errorf("failed to bind port %d: %w", allocatedPort, err)
+			slog.Warn("Port binding failed, retrying",
+				"agent_id", agentID,
+				"port", allocatedPort,
+				"attempt", attempt,
+				"error", err)
+			continue
+		}
+
+		// Port binding succeeded, create server
 		engine := asm.createAgentEngine(agentID)
 		srv = &http.Server{
-			Addr:    fmt.Sprintf(":%d", allocatedPort),
 			Handler: engine,
 		}
 
-		// Try to start server
-		go func(s *http.Server, p int, aid string) {
+		// Start server in goroutine with the listener we already bound
+		go func(s *http.Server, l net.Listener, p int, aid string) {
 			slog.Info("Starting agent HTTP server",
 				"agent_id", aid,
-				"port", p,
-				"attempt", attempt)
+				"port", p)
 
-			if err := s.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			if err := s.Serve(l); err != nil && err != http.ErrServerClosed {
 				slog.Error("Agent HTTP server failed",
 					"agent_id", aid,
 					"port", p,
 					"error", err)
 			}
-		}(srv, allocatedPort, agentID)
+		}(srv, listener, allocatedPort, agentID)
 
-		// Give server a moment to start and potentially fail
-		time.Sleep(100 * time.Millisecond)
-
-		// Check if port is in use by trying to create a listener
-		// If server started successfully, this will be our server
 		port = allocatedPort
 		lastErr = nil
 		break
