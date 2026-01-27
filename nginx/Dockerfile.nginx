@@ -1,0 +1,19 @@
+FROM openresty/openresty:alpine
+
+RUN apk add --no-cache openssl-dev git curl gettext && \
+    mkdir -p /usr/local/openresty/site/lualib/resty/http_connect && \
+    cd /tmp && \
+    curl -fSL https://github.com/ledgetech/lua-resty-http/archive/refs/heads/master.tar.gz -o lua-resty-http.tar.gz && \
+    tar -xzf lua-resty-http.tar.gz && \
+    cp -r lua-resty-http-master/lib/resty/* /usr/local/openresty/site/lualib/resty/ && \
+    rm -rf lua-resty-http.tar.gz lua-resty-http-master
+
+COPY nginx/silo-router.conf /etc/nginx/templates/default.conf.template
+
+EXPOSE ${NGINX_PORT:-8080}
+
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+ENTRYPOINT ["/docker-entrypoint.sh"]
+CMD ["/usr/local/openresty/bin/openresty", "-g", "daemon off;"]
