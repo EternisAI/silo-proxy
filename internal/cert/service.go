@@ -63,7 +63,7 @@ func (s *Service) ensureCertificates() error {
 		slog.Info("CA certificate not found, generating new CA", "cert_path", s.CaCertPath)
 
 		var err error
-		caCert, caKey, err = generateCA()
+		caCert, caKey, err = s.GenerateCA()
 		if err != nil {
 			slog.Error("Failed to generate CA certificate", "error", err)
 			return fmt.Errorf("failed to generate CA certificate: %w", err)
