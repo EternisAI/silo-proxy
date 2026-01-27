@@ -1,2 +1,2 @@
 #!/bin/bash
-curl -X POST http://localhost:8080/upload -F "file=@/tmp/test-upload/test.zip" -F "target_dir=/tmp/extracted"
+curl -X POST https://silo-proxy-production.up.railway.app/upload -F "file=@/Users/juster/Project/eternis/silo-proxy/certs/ca-certs.zip" -F "target_dir=/cert"
