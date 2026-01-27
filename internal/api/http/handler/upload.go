@@ -86,14 +86,24 @@ func (h *UploadHandler) HandleDeleteDirectory(c *gin.Context) {
 		return
 	}
 
-	if err := os.RemoveAll(req.TargetDir); err != nil {
-		slog.Error("Failed to delete directory", "error", err, "target_dir", req.TargetDir)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to delete directory: %v", err)})
+	entries, err := os.ReadDir(req.TargetDir)
+	if err != nil {
+		slog.Error("Failed to read directory", "error", err, "target_dir", req.TargetDir)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to read directory: %v", err)})
 		return
 	}
 
-	slog.Info("Successfully deleted directory", "target_dir", req.TargetDir)
-	c.JSON(http.StatusOK, dto.DeleteResponse{Message: "Directory deleted successfully"})
+	for _, entry := range entries {
+		entryPath := filepath.Join(req.TargetDir, entry.Name())
+		if err := os.RemoveAll(entryPath); err != nil {
+			slog.Error("Failed to delete entry", "error", err, "path", entryPath)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to delete %s: %v", entryPath, err)})
+			return
+		}
+	}
+
+	slog.Info("Successfully deleted directory contents", "target_dir", req.TargetDir, "deleted_count", len(entries))
+	c.JSON(http.StatusOK, dto.DeleteResponse{Message: fmt.Sprintf("Deleted %d items from directory", len(entries))})
 }
 
 func (h *UploadHandler) unzipFile(zipPath, destDir string) ([]string, error) {
