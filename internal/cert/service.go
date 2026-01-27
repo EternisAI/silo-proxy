@@ -263,9 +263,14 @@ func loadCA(certPath, keyPath string) (*x509.Certificate, *rsa.PrivateKey, error
 		return nil, nil, fmt.Errorf("failed to decode CA key PEM")
 	}
 
-	caKey, err := x509.ParsePKCS1PrivateKey(keyBlock.Bytes)
+	key, err := x509.ParsePKCS8PrivateKey(keyBlock.Bytes)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to parse CA key: %w", err)
+	}
+
+	caKey, ok := key.(*rsa.PrivateKey)
+	if !ok {
+		return nil, nil, fmt.Errorf("CA key is not an RSA private key")
 	}
 
 	return caCert, caKey, nil
@@ -295,9 +300,14 @@ func writeKeyToFile(key *rsa.PrivateKey, path string) error {
 	}
 	defer keyFile.Close()
 
+	keyBytes, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		return fmt.Errorf("failed to marshal key: %w", err)
+	}
+
 	if err := pem.Encode(keyFile, &pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(key),
+		Type:  "PRIVATE KEY",
+		Bytes: keyBytes,
 	}); err != nil {
 		return fmt.Errorf("failed to encode key: %w", err)
 	}
