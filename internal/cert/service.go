@@ -309,3 +309,57 @@ func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
 }
+
+func (s *Service) GenerateAgentCert(agentID string) (*x509.Certificate, *rsa.PrivateKey, error) {
+	slog.Info("Generating agent certificate", "agent_id", agentID)
+
+	caCert, caKey, err := loadCA(s.CaCertPath, s.CaKeyPath)
+	if err != nil {
+		slog.Error("Failed to load CA for agent cert generation", "error", err, "agent_id", agentID)
+		return nil, nil, fmt.Errorf("failed to load CA: %w", err)
+	}
+
+	agentKey, err := rsa.GenerateKey(rand.Reader, 4096)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to generate agent key: %w", err)
+	}
+
+	serialNumber, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to generate serial number: %w", err)
+	}
+
+	agentTemplate := &x509.Certificate{
+		SerialNumber: serialNumber,
+		Subject: pkix.Name{
+			Organization: []string{"Silo Proxy"},
+			CommonName:   agentID,
+		},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		BasicConstraintsValid: true,
+	}
+
+	agentCertBytes, err := x509.CreateCertificate(rand.Reader, agentTemplate, caCert, &agentKey.PublicKey, caKey)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create agent certificate: %w", err)
+	}
+
+	agentCert, err := x509.ParseCertificate(agentCertBytes)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to parse agent certificate: %w", err)
+	}
+
+	slog.Info("Generated agent certificate", "agent_id", agentID)
+	return agentCert, agentKey, nil
+}
+
+func (s *Service) GetCACert() ([]byte, error) {
+	certBytes, err := os.ReadFile(s.CaCertPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read CA certificate: %w", err)
+	}
+	return certBytes, nil
+}
