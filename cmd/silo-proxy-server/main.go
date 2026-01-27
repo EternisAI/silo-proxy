@@ -34,6 +34,7 @@ func main() {
 		ClientAuth: config.Grpc.TLS.ClientAuth,
 	}
 
+	var certService *cert.Service
 	if config.Grpc.TLS.Enabled {
 		certOpts := &cert.Options{}
 
@@ -51,7 +52,8 @@ func main() {
 			}
 		}
 
-		_, err := cert.New(
+		var err error
+		certService, err = cert.New(
 			config.Grpc.TLS.CAFile,
 			"./certs/ca/ca-key.pem",
 			config.Grpc.TLS.CertFile,
@@ -84,7 +86,8 @@ func main() {
 		"pool_size", config.Http.AgentPortRange.End-config.Http.AgentPortRange.Start+1)
 
 	services := &internalhttp.Services{
-		GrpcServer: grpcSrv,
+		GrpcServer:  grpcSrv,
+		CertService: certService,
 	}
 
 	gin.SetMode(gin.ReleaseMode)
