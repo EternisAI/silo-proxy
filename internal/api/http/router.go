@@ -18,6 +18,9 @@ func SetupRoute(engine *gin.Engine, srvs *Services) {
 	engine.GET("/health", healthHandler.Check)
 
 	if srvs.GrpcServer != nil {
+		adminHandler := handler.NewAdminHandler(srvs.GrpcServer)
+		engine.GET("/agents", adminHandler.ListAgents)
+
 		proxyHandler := handler.NewProxyHandler(srvs.GrpcServer)
 		// Specific agent routing with prefix
 		engine.Any("/proxy/:agent_id/*path", proxyHandler.ProxyRequest)
