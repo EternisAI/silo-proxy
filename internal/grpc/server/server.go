@@ -39,7 +39,6 @@ type TLSConfig struct {
 }
 
 func NewServer(port int, tlsConfig *TLSConfig) *Server {
-	// Pass nil for agentServerManager for now - will be wired in Phase 6
 	connManager := NewConnectionManager(nil)
 
 	s := &Server{
@@ -174,4 +173,8 @@ func (s *Server) HandleResponse(msg *proto.ProxyMessage) {
 
 func (s *Server) GetConnectionManager() *ConnectionManager {
 	return s.connManager
+}
+
+func (s *Server) SetAgentServerManager(asm AgentServerManager) {
+	s.connManager.SetAgentServerManager(asm)
 }

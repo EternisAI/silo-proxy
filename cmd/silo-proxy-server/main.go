@@ -34,6 +34,23 @@ func main() {
 
 	grpcSrv := grpcserver.NewServer(config.Grpc.Port, tlsConfig)
 
+	portManager, err := internalhttp.NewPortManager(
+		config.Http.AgentPortRange.Start,
+		config.Http.AgentPortRange.End,
+	)
+	if err != nil {
+		slog.Error("Failed to create port manager", "error", err)
+		os.Exit(1)
+	}
+
+	agentServerManager := internalhttp.NewAgentServerManager(portManager, grpcSrv)
+	grpcSrv.SetAgentServerManager(agentServerManager)
+
+	slog.Info("Agent port pool initialized",
+		"range_start", config.Http.AgentPortRange.Start,
+		"range_end", config.Http.AgentPortRange.End,
+		"pool_size", config.Http.AgentPortRange.End-config.Http.AgentPortRange.Start+1)
+
 	services := &internalhttp.Services{
 		GrpcServer: grpcSrv,
 	}

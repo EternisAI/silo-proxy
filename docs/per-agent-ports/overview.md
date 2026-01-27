@@ -7,7 +7,7 @@
 - ✅ **Phase 3**: ConnectionManager Integration (Complete)
 - ✅ **Phase 4**: Admin API Implementation (Complete)
 - ✅ **Phase 5**: Configuration Updates (Complete)
-- ⏸️ **Phase 6**: Main Application Wiring
+- ✅ **Phase 6**: Main Application Wiring (Complete)
 - ⏸️ **Phase 7**: Cleanup Obsolete Code
 
 ## Overview
@@ -21,6 +21,7 @@ Transform the silo-proxy-server architecture to allocate a unique HTTP listening
 - [Phase 3: ConnectionManager Integration](./phase3.md) ✅
 - [Phase 4: Admin API Implementation](./phase4.md) ✅
 - [Phase 5: Configuration Updates](./phase5.md) ✅
+- [Phase 6: Main Application Wiring](./phase6.md) ✅
 
 ## Motivation
 

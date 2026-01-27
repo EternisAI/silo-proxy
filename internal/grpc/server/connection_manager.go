@@ -56,6 +56,14 @@ func NewConnectionManager(agentServerManager AgentServerManager) *ConnectionMana
 	return cm
 }
 
+// SetAgentServerManager sets the AgentServerManager after ConnectionManager creation.
+// This allows breaking circular dependencies during initialization.
+func (cm *ConnectionManager) SetAgentServerManager(asm AgentServerManager) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	cm.agentServerManager = asm
+}
+
 func (cm *ConnectionManager) Register(agentID string, stream proto.ProxyService_StreamServer) (*AgentConnection, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
