@@ -26,6 +26,7 @@ Current architecture routes all proxy traffic through a single HTTP server on po
 ## Architecture
 
 ### Current Architecture
+
 ```
 User Request → HTTP Server :8080 → Route by /proxy/:agent_id → gRPC → Agent
                     ↓
@@ -33,6 +34,7 @@ User Request → HTTP Server :8080 → Route by /proxy/:agent_id → gRPC → Ag
 ```
 
 ### Proposed Architecture
+
 ```
 User Request → HTTP Server :8100 → gRPC → Agent-1
 User Request → HTTP Server :8101 → gRPC → Agent-2
@@ -51,21 +53,24 @@ Admin Request → HTTP Server :8080 → Admin API
 **Decision**: Dynamic allocation from configurable port range
 
 **Configuration** (`application.yml`):
+
 ```yaml
 http:
-  admin_port: 8080
+  port: 8080
   agent_port_range:
     start: 8100
     end: 8200
 ```
 
 **Rationale**:
+
 - Predictable port usage (no OS ephemeral ports)
 - Easy firewall configuration (fixed range)
 - Configurable for different environments
 - Automatic port reuse prevents exhaustion
 
 **Implementation**:
+
 - Buffered channel holds available ports
 - Allocation: atomic channel receive
 - Release: send back to channel
@@ -76,6 +81,7 @@ http:
 **Decision**: One `http.Server` per agent + shared admin server
 
 **Structure**:
+
 - **Admin Server**: Single server on port 8080 with admin endpoints
 - **Agent Servers**: One `http.Server` per connected agent
   - Minimal Gin engine per agent
@@ -84,6 +90,7 @@ http:
   - CORS + logging middleware
 
 **Server Lifecycle**:
+
 ```
 Agent Connects:
 1. ConnectionManager.Register() called
@@ -102,11 +109,13 @@ Agent Disconnects:
 ### 3. Integration Approach
 
 **Hook Points**:
+
 - `ConnectionManager.Register()`: Start agent HTTP server
 - `ConnectionManager.Deregister()`: Stop agent HTTP server
 - `AgentConnection` struct: Add `Port` field
 
 **Thread Safety**:
+
 - PortManager: Channel-based (naturally thread-safe)
 - AgentServerManager: RWMutex for server map
 - ConnectionManager: Existing RWMutex maintained
@@ -118,12 +127,14 @@ Agent Disconnects:
 **File**: `internal/api/http/port_manager.go`
 
 **Responsibilities**:
+
 - Manage pool of available ports
 - Allocate ports atomically
 - Track allocations (port → agent_id mapping)
 - Release ports back to pool
 
 **Interface**:
+
 ```go
 type PortManager struct {
     availablePorts chan int
@@ -144,12 +155,14 @@ func (pm *PortManager) GetAllocations() map[int]string
 **File**: `internal/api/http/agent_server_manager.go`
 
 **Responsibilities**:
+
 - Manage lifecycle of multiple HTTP servers
 - Create/start agent servers on connection
 - Stop/cleanup agent servers on disconnection
 - Coordinate graceful shutdown
 
 **Interface**:
+
 ```go
 type AgentServerInfo struct {
     AgentID    string
@@ -180,6 +193,7 @@ func (asm *AgentServerManager) Shutdown() error
 **Scenario**: Port range exhausted (more agents than available ports)
 
 **Handling**:
+
 - `PortManager.Allocate()` returns error if channel empty
 - `AgentServerManager.StartAgentServer()` propagates error
 - `ConnectionManager.Register()` fails, agent connection rejected
@@ -190,6 +204,7 @@ func (asm *AgentServerManager) Shutdown() error
 **Scenario**: Port already in use (unlikely with managed pool)
 
 **Handling**:
+
 - Retry allocation up to 3 times
 - Each retry gets different port from pool
 - After exhaustion, fail agent registration
@@ -200,6 +215,7 @@ func (asm *AgentServerManager) Shutdown() error
 **Scenario**: Agent disconnects or server shuts down
 
 **Handling**:
+
 - Use `http.Server.Shutdown()` with 5-second context timeout
 - If timeout exceeded, force `Close()`
 - Always release port back to pool (even on forced close)
@@ -208,11 +224,13 @@ func (asm *AgentServerManager) Shutdown() error
 ### Concurrent Operations
 
 **Thread Safety**:
+
 - **PortManager**: Channel-based allocation (naturally thread-safe)
 - **AgentServerManager**: RWMutex for server map
 - **ConnectionManager**: Existing RWMutex maintained
 
 **Race Conditions Handled**:
+
 1. Multiple agents connecting simultaneously → Channel serializes allocation
 2. Agent disconnect during server startup → Context cancellation aborts startup
 3. Shutdown during agent connect → Channels closed, operations fail gracefully
@@ -222,6 +240,7 @@ func (asm *AgentServerManager) Shutdown() error
 ### Unit Tests
 
 **`port_manager_test.go`**:
+
 - Test allocation from pool
 - Test release back to pool
 - Test exhaustion handling
@@ -229,6 +248,7 @@ func (asm *AgentServerManager) Shutdown() error
 - Test allocation tracking
 
 **`agent_server_manager_test.go`**:
+
 - Test server lifecycle (start/stop)
 - Test concurrent server operations
 - Test port cleanup on stop
@@ -237,6 +257,7 @@ func (asm *AgentServerManager) Shutdown() error
 ### Integration Tests
 
 **End-to-End Flow**:
+
 1. Start server
 2. Connect agent
 3. Verify port allocated and logged
@@ -247,6 +268,7 @@ func (asm *AgentServerManager) Shutdown() error
 8. Verify port released and server stopped
 
 **Admin API**:
+
 1. Connect 3 agents
 2. Call `GET /agents`
 3. Verify response contains 3 agents with correct ports
@@ -255,6 +277,7 @@ func (asm *AgentServerManager) Shutdown() error
 6. Verify response contains 2 agents
 
 **Port Exhaustion**:
+
 1. Configure 3-port range (8100-8102)
 2. Connect 3 agents successfully
 3. Attempt to connect 4th agent
@@ -309,11 +332,13 @@ kill -TERM <server-pid>
 ⚠️ **This is an intentional breaking change to the architecture**
 
 **Removed**:
+
 - Route `/proxy/:agent_id/*path` no longer exists
 - Port 8080 no longer accepts proxy traffic
 - Direct agent routing via path is removed
 
 **New Usage Pattern**:
+
 1. Call `GET :8080/agents` to discover agent ports
 2. Make requests directly to agent-specific ports
 3. No path prefix required
@@ -321,6 +346,7 @@ kill -TERM <server-pid>
 **Example Migration**:
 
 **Before**:
+
 ```bash
 # All traffic through single port with path routing
 curl http://localhost:8080/proxy/agent-1/api/status
@@ -328,6 +354,7 @@ curl http://localhost:8080/proxy/agent-2/api/status
 ```
 
 **After**:
+
 ```bash
 # Discover agent ports
 curl http://localhost:8080/agents
@@ -346,15 +373,17 @@ curl http://localhost:8101/api/status
 ### Configuration Migration
 
 **Old** (`application.yml`):
+
 ```yaml
 http:
   port: 8080
 ```
 
 **New** (`application.yml`):
+
 ```yaml
 http:
-  admin_port: 8080
+  port: 8080 // admin port
   agent_port_range:
     start: 8100
     end: 8200
@@ -367,12 +396,14 @@ http:
 **Recommended**: 100 ports (default: 8100-8200)
 
 **Factors**:
+
 - Expected number of agents
 - Growth headroom (2-3x current usage)
 - Firewall rule complexity
 - Port availability on host
 
 **Example Configurations**:
+
 - **Small deployment** (1-10 agents): 8100-8120 (20 ports)
 - **Medium deployment** (10-50 agents): 8100-8200 (100 ports)
 - **Large deployment** (50+ agents): 8100-8500 (400 ports)
@@ -380,11 +411,13 @@ http:
 ### Firewall Configuration
 
 Ensure firewall allows inbound connections to:
+
 - Admin port: 8080 (TCP)
 - Agent port range: 8100-8200 (TCP)
 - gRPC port: 9090 (TCP)
 
 **Example iptables**:
+
 ```bash
 # Admin port
 iptables -A INPUT -p tcp --dport 8080 -j ACCEPT
@@ -399,6 +432,7 @@ iptables -A INPUT -p tcp --dport 9090 -j ACCEPT
 ### Monitoring
 
 **Key Metrics to Monitor**:
+
 - Active agent count
 - Port pool utilization (allocated / total)
 - Agent connection/disconnection rate
@@ -406,6 +440,7 @@ iptables -A INPUT -p tcp --dport 9090 -j ACCEPT
 - Agent server start/stop failures
 
 **Logging**:
+
 - Agent registration/deregistration (INFO level)
 - Port allocation/release (INFO level)
 - Server start/stop failures (ERROR level)
@@ -414,12 +449,13 @@ iptables -A INPUT -p tcp --dport 9090 -j ACCEPT
 ### Security
 
 **Admin API**:
+
 - Consider adding authentication (API keys, JWT)
 - Restrict admin port to internal network
 - Rate limit admin endpoints
 
 **Agent Ports**:
-- Consider TLS for agent HTTP servers
+
 - Restrict access to known IP ranges
 - Add authentication at application level
 
@@ -445,7 +481,7 @@ iptables -A INPUT -p tcp --dport 9090 -j ACCEPT
 
 ## Future Enhancements
 
-- TLS support for agent HTTP servers
+- No need for TLS support for agent HTTP servers
 - Authentication/authorization for admin endpoints
 - Metrics endpoint per agent (request counts, latency)
 - Health check per agent port
