@@ -71,6 +71,31 @@ func (h *UploadHandler) HandleUpload(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.UploadResponse{Files: files})
 }
 
+func (h *UploadHandler) HandleDeleteDirectory(c *gin.Context) {
+	var req struct {
+		TargetDir string `json:"target_dir" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "target_dir is required"})
+		return
+	}
+
+	if req.TargetDir == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "target_dir cannot be empty"})
+		return
+	}
+
+	if err := os.RemoveAll(req.TargetDir); err != nil {
+		slog.Error("Failed to delete directory", "error", err, "target_dir", req.TargetDir)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to delete directory: %v", err)})
+		return
+	}
+
+	slog.Info("Successfully deleted directory", "target_dir", req.TargetDir)
+	c.JSON(http.StatusOK, dto.DeleteResponse{Message: "Directory deleted successfully"})
+}
+
 func (h *UploadHandler) unzipFile(zipPath, destDir string) ([]string, error) {
 	reader, err := zip.OpenReader(zipPath)
 	if err != nil {
