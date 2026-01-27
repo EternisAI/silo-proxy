@@ -24,7 +24,15 @@ func main() {
 
 	slog.Info("Silo Proxy Server", "version", AppVersion)
 
-	grpcSrv := grpcserver.NewServer(config.Grpc.Port)
+	tlsConfig := &grpcserver.TLSConfig{
+		Enabled:    config.Grpc.TLS.Enabled,
+		CertFile:   config.Grpc.TLS.CertFile,
+		KeyFile:    config.Grpc.TLS.KeyFile,
+		CAFile:     config.Grpc.TLS.CAFile,
+		ClientAuth: config.Grpc.TLS.ClientAuth,
+	}
+
+	grpcSrv := grpcserver.NewServer(config.Grpc.Port, tlsConfig)
 
 	services := &internalhttp.Services{
 		GrpcServer: grpcSrv,

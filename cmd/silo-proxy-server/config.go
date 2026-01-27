@@ -17,7 +17,16 @@ type Config struct {
 }
 
 type GrpcConfig struct {
-	Port int `mapstructure:"port"`
+	Port int       `mapstructure:"port"`
+	TLS  TLSConfig `mapstructure:"tls"`
+}
+
+type TLSConfig struct {
+	Enabled    bool   `mapstructure:"enabled"`
+	CertFile   string `mapstructure:"cert_file"`
+	KeyFile    string `mapstructure:"key_file"`
+	CAFile     string `mapstructure:"ca_file"`
+	ClientAuth string `mapstructure:"client_auth"`
 }
 
 var config Config

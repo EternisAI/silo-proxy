@@ -12,6 +12,8 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+
+	grpctls "github.com/EternisAI/silo-proxy/internal/grpc/tls"
 )
 
 const (
@@ -25,6 +27,7 @@ const (
 type Client struct {
 	serverAddr string
 	agentID    string
+	tlsConfig  *TLSConfig
 	conn       *grpc.ClientConn
 	stream     proto.ProxyService_StreamClient
 
@@ -42,11 +45,20 @@ type Client struct {
 	mu     sync.RWMutex
 }
 
-func NewClient(serverAddr, agentID, localURL string) *Client {
+type TLSConfig struct {
+	Enabled            bool
+	CertFile           string
+	KeyFile            string
+	CAFile             string
+	ServerNameOverride string
+}
+
+func NewClient(serverAddr, agentID, localURL string, tlsConfig *TLSConfig) *Client {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Client{
 		serverAddr:        serverAddr,
 		agentID:           agentID,
+		tlsConfig:         tlsConfig,
 		sendCh:            make(chan *proto.ProxyMessage, sendChannelBuffer),
 		stopCh:            make(chan struct{}),
 		doneCh:            make(chan struct{}),
@@ -128,7 +140,27 @@ func (c *Client) connectionLoop() {
 func (c *Client) connect() error {
 	slog.Info("Connecting to server", "address", c.serverAddr)
 
-	conn, err := grpc.NewClient(c.serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	var opts []grpc.DialOption
+
+	if c.tlsConfig != nil && c.tlsConfig.Enabled {
+		creds, err := grpctls.LoadClientCredentials(
+			c.tlsConfig.CertFile,
+			c.tlsConfig.KeyFile,
+			c.tlsConfig.CAFile,
+			c.tlsConfig.ServerNameOverride,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to load TLS credentials: %w", err)
+		}
+
+		opts = append(opts, grpc.WithTransportCredentials(creds))
+		slog.Info("Using TLS connection")
+	} else {
+		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		slog.Warn("Using insecure connection (TLS disabled)")
+	}
+
+	conn, err := grpc.NewClient(c.serverAddr, opts...)
 	if err != nil {
 		return fmt.Errorf("failed to dial server: %w", err)
 	}
