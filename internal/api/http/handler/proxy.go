@@ -37,6 +37,13 @@ func (h *ProxyHandler) ProxyRequest(c *gin.Context) {
 	h.forwardRequest(c, agentID, targetPath)
 }
 
+// ProxyRequestDirect forwards a request directly to a specific agent
+// without requiring agent_id in the URL path. Used by per-agent HTTP servers.
+func (h *ProxyHandler) ProxyRequestDirect(c *gin.Context, agentID string) {
+	targetPath := c.Request.URL.Path
+	h.forwardRequest(c, agentID, targetPath)
+}
+
 func (h *ProxyHandler) forwardRequest(c *gin.Context, agentID, targetPath string) {
 	conn, ok := h.grpcServer.GetConnectionManager().GetConnection(agentID)
 	if !ok {

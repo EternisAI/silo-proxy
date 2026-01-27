@@ -3,7 +3,7 @@
 ## Progress
 
 - ✅ **Phase 1**: Port Management Infrastructure (Complete - commit e13000e)
-- ⏸️ **Phase 2**: Agent Server Management
+- ✅ **Phase 2**: Agent Server Management (Complete)
 - ⏸️ **Phase 3**: ConnectionManager Integration
 - ⏸️ **Phase 4**: Admin API Implementation
 - ⏸️ **Phase 5**: Configuration Updates
@@ -17,6 +17,7 @@ Transform the silo-proxy-server architecture to allocate a unique HTTP listening
 ## Detailed Phase Documentation
 
 - [Phase 1: Port Management Infrastructure](./phase1.md) ✅
+- [Phase 2: Agent Server Management](./phase2.md) ✅
 
 ## Motivation
 
