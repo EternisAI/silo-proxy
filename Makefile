@@ -7,7 +7,7 @@ AGENT			:= silo-proxy-agent
 VERSION 		?= v0.1.0
 LDFLAGS 		:= -ldflags "-X main.AppVersion=$(VERSION)"
 
-.PHONY: all build build-server build-agent clean test generate docker docker-server docker-agent docker-all protoc protoc-gen run run-agent
+.PHONY: all build build-server build-agent clean test generate docker docker-server docker-agent docker-all protoc protoc-gen run run-agent generate-certs
 
 all: clean build
 
@@ -52,3 +52,6 @@ protoc-gen: protoc
 	  --go-grpc_out=proto \
 	  --go-grpc_opt=paths=source_relative \
 	  proto/proxy.proto
+
+generate-certs:
+	./scripts/generate-certs.sh
