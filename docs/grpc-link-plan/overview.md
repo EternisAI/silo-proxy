@@ -7,6 +7,7 @@
 - ✅ **Phase 3**: Agent Implementation (gRPC client, reconnection, graceful shutdown)
 - ✅ **Phase 4**: Keep-Alive Mechanism (PING/PONG, stale connection detection)
 - ✅ **Phase 5**: Request Forwarding (HTTP → gRPC → HTTP)
+- ✅ **Phase 6**: TLS/mTLS Encryption (secure communication, mutual authentication)
 
 ## Architecture
 
@@ -18,7 +19,7 @@ User → Server (Cloud) ←[gRPC]→ Agent (Silo Box) → Local Services
 
 ## Design Principles
 
-1. **Simple**: No TLS/mTLS for now
+1. **Secure**: Optional TLS/mTLS for encrypted communication
 2. **Agent-Initiated**: Agent connects to server (works through NAT)
 3. **Bidirectional Stream**: Single persistent connection
 4. **Separation of Concerns**: gRPC layer separate from HTTP layer
@@ -36,6 +37,12 @@ User → Server (Cloud) ←[gRPC]→ Agent (Silo Box) → Local Services
 ```yaml
 grpc:
   port: 9090
+  tls:
+    enabled: true                              # Enable TLS
+    cert_file: ./certs/server/server-cert.pem
+    key_file: ./certs/server/server-key.pem
+    ca_file: ./certs/ca/ca-cert.pem
+    client_auth: require                       # none, request, require
 ```
 
 **Agent** (`cmd/silo-proxy-agent/application.yml`):
@@ -43,9 +50,20 @@ grpc:
 grpc:
   server_address: "localhost:9090"
   agent_id: "agent-1"
+  tls:
+    enabled: true                              # Enable TLS
+    cert_file: ./certs/agents/agent-1-cert.pem
+    key_file: ./certs/agents/agent-1-key.pem
+    ca_file: ./certs/ca/ca-cert.pem
+    server_name_override: ""                   # Optional
 ```
 
-## Current Status (2026-01-25)
+**Generate Development Certificates**:
+```bash
+make generate-certs
+```
+
+## Current Status (2026-01-27)
 
 ### What's Working
 
@@ -75,6 +93,13 @@ grpc:
 - Agent forwards to local service
 - Return HTTP response to user
 - Average latency: ~1ms
+
+✅ **TLS/mTLS Encryption**
+- Optional TLS encryption for gRPC channel
+- Mutual authentication with client certificates
+- Self-signed certificates for development
+- Backward compatible (can disable TLS)
+- Server validates agent certificates
 
 ## Usage
 
@@ -120,9 +145,9 @@ curl -X POST -H "Content-Type: application/json" \
 ## Next Steps
 
 Potential enhancements:
-- TLS/mTLS for secure communication
-- Authentication and authorization
+- Authentication and authorization (beyond mTLS)
 - Request/response compression
 - Metrics and monitoring
-- Multiple agent support with load balancing
+- Certificate rotation and management
 - WebSocket support
+- Production-grade certificate management
