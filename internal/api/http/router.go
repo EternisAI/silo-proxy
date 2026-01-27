@@ -21,6 +21,9 @@ func SetupRoute(engine *gin.Engine, srvs *Services) {
 	healthHandler := handler.NewHealthHandler()
 	engine.GET("/health", healthHandler.Check)
 
+	uploadHandler := handler.NewUploadHandler()
+	engine.POST("/upload", uploadHandler.HandleUpload)
+
 	if srvs.GrpcServer != nil {
 		proxyHandler := handler.NewProxyHandler(srvs.GrpcServer)
 		// Specific agent routing with prefix
