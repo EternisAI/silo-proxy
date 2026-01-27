@@ -13,7 +13,5 @@ grpc:
     key_file: ./certs/server/server-key.pem
     ca_file: ./certs/ca/ca-cert.pem
     client_auth: require
-    domain_names:
-      - localhost
-    ip_addresses:
-      - 127.0.0.1
+    domain_names: "localhost"
+    ip_addresses: "127.0.0.1"

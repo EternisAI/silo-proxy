@@ -22,16 +22,30 @@ type GrpcConfig struct {
 }
 
 type TLSConfig struct {
-	Enabled     bool     `mapstructure:"enabled"`
-	CertFile    string   `mapstructure:"cert_file"`
-	KeyFile     string   `mapstructure:"key_file"`
-	CAFile      string   `mapstructure:"ca_file"`
-	ClientAuth  string   `mapstructure:"client_auth"`
-	DomainNames []string `mapstructure:"domain_names"`
-	IPAddresses []string `mapstructure:"ip_addresses"`
+	Enabled     bool   `mapstructure:"enabled"`
+	CertFile    string `mapstructure:"cert_file"`
+	KeyFile     string `mapstructure:"key_file"`
+	CAFile      string `mapstructure:"ca_file"`
+	ClientAuth  string `mapstructure:"client_auth"`
+	DomainNames string `mapstructure:"domain_names"`
+	IPAddresses string `mapstructure:"ip_addresses"`
 }
 
 var config Config
+
+func ParseCommaSeparated(input string) []string {
+	if input == "" {
+		return nil
+	}
+	parts := strings.Split(input, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
+}
 
 func InitConfig() {
 	var err error

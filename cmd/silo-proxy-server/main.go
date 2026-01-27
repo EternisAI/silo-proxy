@@ -38,12 +38,14 @@ func main() {
 	if config.Grpc.TLS.Enabled {
 		certOpts := &cert.Options{}
 
-		if len(config.Grpc.TLS.DomainNames) > 0 {
-			certOpts.DomainNames = config.Grpc.TLS.DomainNames
+		domainNames := ParseCommaSeparated(config.Grpc.TLS.DomainNames)
+		if len(domainNames) > 0 {
+			certOpts.DomainNames = domainNames
 		}
 
-		if len(config.Grpc.TLS.IPAddresses) > 0 {
-			for _, ipStr := range config.Grpc.TLS.IPAddresses {
+		ipAddresses := ParseCommaSeparated(config.Grpc.TLS.IPAddresses)
+		if len(ipAddresses) > 0 {
+			for _, ipStr := range ipAddresses {
 				if ip := net.ParseIP(ipStr); ip != nil {
 					certOpts.IPAddresses = append(certOpts.IPAddresses, ip)
 				} else {
