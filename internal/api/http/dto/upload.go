@@ -7,3 +7,7 @@ type UploadResponse struct {
 type DeleteResponse struct {
 	Message string `json:"message"`
 }
+
+type ListResponse struct {
+	Files []string `json:"files"`
+}

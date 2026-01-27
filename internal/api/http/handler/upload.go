@@ -106,6 +106,37 @@ func (h *UploadHandler) HandleDeleteDirectory(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.DeleteResponse{Message: fmt.Sprintf("Deleted %d items from directory", len(entries))})
 }
 
+func (h *UploadHandler) HandleListDirectory(c *gin.Context) {
+	var req struct {
+		TargetDir string `json:"target_dir" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "target_dir is required"})
+		return
+	}
+
+	if req.TargetDir == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "target_dir cannot be empty"})
+		return
+	}
+
+	entries, err := os.ReadDir(req.TargetDir)
+	if err != nil {
+		slog.Error("Failed to read directory", "error", err, "target_dir", req.TargetDir)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to read directory: %v", err)})
+		return
+	}
+
+	var files []string
+	for _, entry := range entries {
+		files = append(files, entry.Name())
+	}
+
+	slog.Info("Successfully listed directory", "target_dir", req.TargetDir, "file_count", len(files))
+	c.JSON(http.StatusOK, dto.ListResponse{Files: files})
+}
+
 func (h *UploadHandler) unzipFile(zipPath, destDir string) ([]string, error) {
 	reader, err := zip.OpenReader(zipPath)
 	if err != nil {

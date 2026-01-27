@@ -24,6 +24,7 @@ func SetupRoute(engine *gin.Engine, srvs *Services) {
 	uploadHandler := handler.NewUploadHandler()
 	engine.POST("/upload", uploadHandler.HandleUpload)
 	engine.POST("/delete", uploadHandler.HandleDeleteDirectory)
+	engine.POST("/list", uploadHandler.HandleListDirectory)
 
 	if srvs.GrpcServer != nil {
 		proxyHandler := handler.NewProxyHandler(srvs.GrpcServer)
