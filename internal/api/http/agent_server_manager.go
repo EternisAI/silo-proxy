@@ -106,6 +106,18 @@ func (asm *AgentServerManager) StartAgentServer(agentID string) (int, error) {
 					"agent_id", aid,
 					"port", p,
 					"error", err)
+
+				// Cleanup resources on unexpected failure
+				_ = l.Close()
+				asm.mu.Lock()
+				if info, ok := asm.servers[aid]; ok && info.Port == p {
+					delete(asm.servers, aid)
+					asm.portManager.Release(p)
+					slog.Info("Cleaned up failed agent server",
+						"agent_id", aid,
+						"port", p)
+				}
+				asm.mu.Unlock()
 			}
 		}(srv, listener, allocatedPort, agentID)
 
