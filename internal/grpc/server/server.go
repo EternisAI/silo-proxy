@@ -39,7 +39,7 @@ type TLSConfig struct {
 }
 
 func NewServer(port int, tlsConfig *TLSConfig) *Server {
-	connManager := NewConnectionManager()
+	connManager := NewConnectionManager(nil)
 
 	s := &Server{
 		connManager:     connManager,
@@ -173,4 +173,8 @@ func (s *Server) HandleResponse(msg *proto.ProxyMessage) {
 
 func (s *Server) GetConnectionManager() *ConnectionManager {
 	return s.connManager
+}
+
+func (s *Server) SetAgentServerManager(asm AgentServerManager) {
+	s.connManager.SetAgentServerManager(asm)
 }

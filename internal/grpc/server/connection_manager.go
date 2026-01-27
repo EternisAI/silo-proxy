@@ -10,6 +10,15 @@ import (
 	"github.com/EternisAI/silo-proxy/proto"
 )
 
+// AgentServerManager interface defines the per-agent HTTP server management methods.
+// This interface allows ConnectionManager to manage agent HTTP servers without
+// direct dependency on the http package implementation.
+type AgentServerManager interface {
+	StartAgentServer(agentID string) (int, error)
+	StopAgentServer(agentID string) error
+	Shutdown() error
+}
+
 const (
 	sendChannelBuffer      = 100
 	sendTimeout            = 5 * time.Second
@@ -19,6 +28,7 @@ const (
 
 type AgentConnection struct {
 	ID       string
+	Port     int // HTTP server port for this agent (0 if no dedicated server)
 	Stream   proto.ProxyService_StreamServer
 	SendCh   chan *proto.ProxyMessage
 	LastSeen time.Time
@@ -27,34 +37,73 @@ type AgentConnection struct {
 }
 
 type ConnectionManager struct {
-	agents map[string]*AgentConnection
-	mu     sync.RWMutex
-	stopCh chan struct{}
+	agents             map[string]*AgentConnection
+	mu                 sync.RWMutex
+	stopCh             chan struct{}
+	agentServerManager AgentServerManager // Optional: manages per-agent HTTP servers
 }
 
-func NewConnectionManager() *ConnectionManager {
+// NewConnectionManager creates a new ConnectionManager.
+// The agentServerManager parameter is optional (can be nil) and enables
+// per-agent HTTP server management when provided.
+func NewConnectionManager(agentServerManager AgentServerManager) *ConnectionManager {
 	cm := &ConnectionManager{
-		agents: make(map[string]*AgentConnection),
-		stopCh: make(chan struct{}),
+		agents:             make(map[string]*AgentConnection),
+		stopCh:             make(chan struct{}),
+		agentServerManager: agentServerManager,
 	}
 	go cm.cleanupStaleConnections()
 	return cm
+}
+
+// SetAgentServerManager sets the AgentServerManager after ConnectionManager creation.
+// This allows breaking circular dependencies during initialization.
+func (cm *ConnectionManager) SetAgentServerManager(asm AgentServerManager) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	cm.agentServerManager = asm
 }
 
 func (cm *ConnectionManager) Register(agentID string, stream proto.ProxyService_StreamServer) (*AgentConnection, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
+	// Clean up existing connection if present
 	if existing, ok := cm.agents[agentID]; ok {
 		slog.Warn("Agent already connected, replacing connection", "agent_id", agentID)
 		existing.cancel()
 		close(existing.SendCh)
+
+		// Stop existing agent server if manager available
+		if cm.agentServerManager != nil && existing.Port != 0 {
+			if err := cm.agentServerManager.StopAgentServer(agentID); err != nil {
+				slog.Error("Failed to stop existing agent server during re-registration",
+					"agent_id", agentID,
+					"port", existing.Port,
+					"error", err)
+			}
+		}
+
 		delete(cm.agents, agentID)
+	}
+
+	// Start per-agent HTTP server if manager available
+	var port int
+	if cm.agentServerManager != nil {
+		allocatedPort, err := cm.agentServerManager.StartAgentServer(agentID)
+		if err != nil {
+			slog.Error("Failed to start agent HTTP server",
+				"agent_id", agentID,
+				"error", err)
+			return nil, fmt.Errorf("failed to start agent HTTP server: %w", err)
+		}
+		port = allocatedPort
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	conn := &AgentConnection{
 		ID:       agentID,
+		Port:     port,
 		Stream:   stream,
 		SendCh:   make(chan *proto.ProxyMessage, sendChannelBuffer),
 		LastSeen: time.Now(),
@@ -63,7 +112,17 @@ func (cm *ConnectionManager) Register(agentID string, stream proto.ProxyService_
 	}
 
 	cm.agents[agentID] = conn
-	slog.Info("Agent registered", "agent_id", agentID, "total_connections", len(cm.agents))
+
+	if port != 0 {
+		slog.Info("Agent registered with dedicated HTTP server",
+			"agent_id", agentID,
+			"port", port,
+			"total_connections", len(cm.agents))
+	} else {
+		slog.Info("Agent registered",
+			"agent_id", agentID,
+			"total_connections", len(cm.agents))
+	}
 
 	return conn, nil
 }
@@ -75,8 +134,29 @@ func (cm *ConnectionManager) Deregister(agentID string) {
 	if conn, ok := cm.agents[agentID]; ok {
 		conn.cancel()
 		close(conn.SendCh)
+
+		// Stop agent HTTP server if manager available
+		if cm.agentServerManager != nil && conn.Port != 0 {
+			if err := cm.agentServerManager.StopAgentServer(agentID); err != nil {
+				slog.Error("Failed to stop agent HTTP server during deregistration",
+					"agent_id", agentID,
+					"port", conn.Port,
+					"error", err)
+			}
+		}
+
 		delete(cm.agents, agentID)
-		slog.Info("Agent deregistered", "agent_id", agentID, "total_connections", len(cm.agents))
+
+		if conn.Port != 0 {
+			slog.Info("Agent deregistered, HTTP server stopped",
+				"agent_id", agentID,
+				"port", conn.Port,
+				"total_connections", len(cm.agents))
+		} else {
+			slog.Info("Agent deregistered",
+				"agent_id", agentID,
+				"total_connections", len(cm.agents))
+		}
 	}
 }
 
@@ -135,11 +215,28 @@ func (cm *ConnectionManager) Stop() {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	for _, conn := range cm.agents {
+	for agentID, conn := range cm.agents {
 		conn.cancel()
 		close(conn.SendCh)
+
+		// Stop agent HTTP server if manager available
+		if cm.agentServerManager != nil && conn.Port != 0 {
+			if err := cm.agentServerManager.StopAgentServer(agentID); err != nil {
+				slog.Error("Failed to stop agent HTTP server during shutdown",
+					"agent_id", agentID,
+					"port", conn.Port,
+					"error", err)
+			}
+		}
 	}
 	cm.agents = make(map[string]*AgentConnection)
+
+	// Shutdown all agent servers if manager available
+	if cm.agentServerManager != nil {
+		if err := cm.agentServerManager.Shutdown(); err != nil {
+			slog.Error("Failed to shutdown agent server manager", "error", err)
+		}
+	}
 }
 
 func (cm *ConnectionManager) cleanupStaleConnections() {
@@ -163,9 +260,24 @@ func (cm *ConnectionManager) removeStaleConnections() {
 	now := time.Now()
 	for agentID, conn := range cm.agents {
 		if now.Sub(conn.LastSeen) > staleConnectionTimeout {
-			slog.Warn("Removing stale connection", "agent_id", agentID, "last_seen", conn.LastSeen)
+			slog.Warn("Removing stale connection",
+				"agent_id", agentID,
+				"last_seen", conn.LastSeen,
+				"port", conn.Port)
+
 			conn.cancel()
 			close(conn.SendCh)
+
+			// Stop agent HTTP server if manager available
+			if cm.agentServerManager != nil && conn.Port != 0 {
+				if err := cm.agentServerManager.StopAgentServer(agentID); err != nil {
+					slog.Error("Failed to stop agent HTTP server during stale connection cleanup",
+						"agent_id", agentID,
+						"port", conn.Port,
+						"error", err)
+				}
+			}
+
 			delete(cm.agents, agentID)
 		}
 	}

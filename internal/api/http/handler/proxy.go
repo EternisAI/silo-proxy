@@ -22,18 +22,10 @@ func NewProxyHandler(grpcServer *server.Server) *ProxyHandler {
 	}
 }
 
-func (h *ProxyHandler) ProxyRootRequest(c *gin.Context) {
-	h.forwardRequest(c, "agent-1", c.Request.URL.Path)
-}
-
-func (h *ProxyHandler) ProxyRequest(c *gin.Context) {
-	agentID := c.Param("agent_id")
-	if agentID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "agent_id is required"})
-		return
-	}
-
-	targetPath := c.Param("path")
+// ProxyRequestDirect forwards a request directly to a specific agent
+// without requiring agent_id in the URL path. Used by per-agent HTTP servers.
+func (h *ProxyHandler) ProxyRequestDirect(c *gin.Context, agentID string) {
+	targetPath := c.Request.URL.Path
 	h.forwardRequest(c, agentID, targetPath)
 }
 

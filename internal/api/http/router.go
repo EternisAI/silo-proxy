@@ -7,10 +7,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type Config struct {
-	Port uint
-}
-
 type Services struct {
 	GrpcServer *grpcserver.Server
 }
@@ -22,10 +18,7 @@ func SetupRoute(engine *gin.Engine, srvs *Services) {
 	engine.GET("/health", healthHandler.Check)
 
 	if srvs.GrpcServer != nil {
-		proxyHandler := handler.NewProxyHandler(srvs.GrpcServer)
-		// Specific agent routing with prefix
-		engine.Any("/proxy/:agent_id/*path", proxyHandler.ProxyRequest)
-		// Catch-all: route everything else to default agent (agent-1)
-		engine.NoRoute(proxyHandler.ProxyRootRequest)
+		adminHandler := handler.NewAdminHandler(srvs.GrpcServer)
+		engine.GET("/agents", adminHandler.ListAgents)
 	}
 }
