@@ -2,6 +2,9 @@ log:
   level: debug
 http:
   port: 8080
+  agent_port_range:
+    start: 8100
+    end: 8200
 grpc:
   port: 9090
   tls:

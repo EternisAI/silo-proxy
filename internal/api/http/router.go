@@ -8,7 +8,13 @@ import (
 )
 
 type Config struct {
-	Port uint
+	Port           uint
+	AgentPortRange PortRange
+}
+
+type PortRange struct {
+	Start int
+	End   int
 }
 
 type Services struct {
