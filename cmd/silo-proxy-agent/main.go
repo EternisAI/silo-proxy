@@ -24,7 +24,15 @@ func main() {
 
 	slog.Info("Silo Proxy Agent", "version", AppVersion)
 
-	grpcClient := grpcclient.NewClient(config.Grpc.ServerAddress, config.Grpc.AgentID, config.Local.ServiceURL)
+	tlsConfig := &grpcclient.TLSConfig{
+		Enabled:            config.Grpc.TLS.Enabled,
+		CertFile:           config.Grpc.TLS.CertFile,
+		KeyFile:            config.Grpc.TLS.KeyFile,
+		CAFile:             config.Grpc.TLS.CAFile,
+		ServerNameOverride: config.Grpc.TLS.ServerNameOverride,
+	}
+
+	grpcClient := grpcclient.NewClient(config.Grpc.ServerAddress, config.Grpc.AgentID, config.Local.ServiceURL, tlsConfig)
 	if err := grpcClient.Start(); err != nil {
 		slog.Error("Failed to start gRPC client", "error", err)
 		os.Exit(1)

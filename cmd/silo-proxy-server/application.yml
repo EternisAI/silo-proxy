@@ -4,3 +4,9 @@ http:
   port: 8080
 grpc:
   port: 9090
+  tls:
+    enabled: false
+    cert_file: ./certs/server/server-cert.pem
+    key_file: ./certs/server/server-key.pem
+    ca_file: ./certs/ca/ca-cert.pem
+    client_auth: require

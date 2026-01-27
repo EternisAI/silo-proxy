@@ -18,8 +18,17 @@ type Config struct {
 }
 
 type GrpcConfig struct {
-	ServerAddress string `mapstructure:"server_address"`
-	AgentID       string `mapstructure:"agent_id"`
+	ServerAddress string    `mapstructure:"server_address"`
+	AgentID       string    `mapstructure:"agent_id"`
+	TLS           TLSConfig `mapstructure:"tls"`
+}
+
+type TLSConfig struct {
+	Enabled            bool   `mapstructure:"enabled"`
+	CertFile           string `mapstructure:"cert_file"`
+	KeyFile            string `mapstructure:"key_file"`
+	CAFile             string `mapstructure:"ca_file"`
+	ServerNameOverride string `mapstructure:"server_name_override"`
 }
 
 type LocalConfig struct {

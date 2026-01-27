@@ -10,6 +10,8 @@ import (
 
 	"github.com/EternisAI/silo-proxy/proto"
 	"google.golang.org/grpc"
+
+	grpctls "github.com/EternisAI/silo-proxy/internal/grpc/tls"
 )
 
 const (
@@ -22,17 +24,27 @@ type Server struct {
 	connManager     *ConnectionManager
 	streamHandler   *StreamHandler
 	port            int
+	tlsConfig       *TLSConfig
 	listener        net.Listener
 	pendingRequests map[string]chan *proto.ProxyMessage
 	pendingMu       sync.RWMutex
 }
 
-func NewServer(port int) *Server {
+type TLSConfig struct {
+	Enabled    bool
+	CertFile   string
+	KeyFile    string
+	CAFile     string
+	ClientAuth string
+}
+
+func NewServer(port int, tlsConfig *TLSConfig) *Server {
 	connManager := NewConnectionManager()
 
 	s := &Server{
 		connManager:     connManager,
 		port:            port,
+		tlsConfig:       tlsConfig,
 		pendingRequests: make(map[string]chan *proto.ProxyMessage),
 	}
 
@@ -49,10 +61,32 @@ func (s *Server) Start() error {
 	}
 	s.listener = lis
 
-	s.grpcServer = grpc.NewServer()
-	proto.RegisterProxyServiceServer(s.grpcServer, s)
+	var opts []grpc.ServerOption
 
-	slog.Info("Starting gRPC server", "port", s.port)
+	if s.tlsConfig != nil && s.tlsConfig.Enabled {
+		clientAuth, err := grpctls.ParseClientAuthType(s.tlsConfig.ClientAuth)
+		if err != nil {
+			return fmt.Errorf("invalid client auth type: %w", err)
+		}
+
+		creds, err := grpctls.LoadServerCredentials(
+			s.tlsConfig.CertFile,
+			s.tlsConfig.KeyFile,
+			s.tlsConfig.CAFile,
+			clientAuth,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to load TLS credentials: %w", err)
+		}
+
+		opts = append(opts, grpc.Creds(creds))
+		slog.Info("Starting gRPC server with TLS", "port", s.port, "client_auth", s.tlsConfig.ClientAuth)
+	} else {
+		slog.Warn("Starting gRPC server without TLS (insecure)", "port", s.port)
+	}
+
+	s.grpcServer = grpc.NewServer(opts...)
+	proto.RegisterProxyServiceServer(s.grpcServer, s)
 
 	if err := s.grpcServer.Serve(lis); err != nil {
 		return fmt.Errorf("failed to serve gRPC: %w", err)
