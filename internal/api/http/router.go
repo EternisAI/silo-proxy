@@ -33,5 +33,6 @@ func SetupRoute(engine *gin.Engine, srvs *Services) {
 		agents.DELETE("/:id/certificate", certHandler.DeleteAgentCertificate)
 	}
 
-	engine.DELETE("/server", certHandler.DeleteServerCerts)
+	// Temp endpoint for cleaning
+	engine.DELETE("/server-certs", certHandler.DeleteServerCerts)
 }
