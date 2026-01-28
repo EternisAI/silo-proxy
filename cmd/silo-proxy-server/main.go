@@ -42,6 +42,7 @@ func main() {
 			config.Grpc.TLS.CAKeyFile,
 			config.Grpc.TLS.CertFile,
 			config.Grpc.TLS.KeyFile,
+			config.Grpc.TLS.AgentCertDir,
 			config.Grpc.TLS.DomainNames,
 			config.Grpc.TLS.IPAddresses,
 		)

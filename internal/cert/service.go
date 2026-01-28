@@ -15,16 +15,18 @@ type Service struct {
 	CaKeyPath      string
 	ServerCertPath string
 	ServerKeyPath  string
+	AgentCertDir   string
 	DomainNames    []string
 	IPAddresses    []net.IP
 }
 
-func New(caCertPath, caKeyPath, serverCertPath, serverKeyPath, domainNamesConfig, IPAddressesConfig string) (*Service, error) {
+func New(caCertPath, caKeyPath, serverCertPath, serverKeyPath, agentCertDir, domainNamesConfig, IPAddressesConfig string) (*Service, error) {
 	s := &Service{
 		CaCertPath:     caCertPath,
 		CaKeyPath:      caKeyPath,
 		ServerCertPath: serverCertPath,
 		ServerKeyPath:  serverKeyPath,
+		AgentCertDir:   agentCertDir,
 	}
 
 	domainNames := ParseCommaSeparated(domainNamesConfig)
@@ -153,4 +155,77 @@ func (s *Service) GetCACert() ([]byte, error) {
 		return nil, fmt.Errorf("failed to read CA certificate: %w", err)
 	}
 	return certBytes, nil
+}
+
+func (s *Service) GetAgentCertDir(agentID string) string {
+	return filepath.Join(s.AgentCertDir, agentID)
+}
+
+func (s *Service) GetAgentCertPath(agentID string) string {
+	return filepath.Join(s.GetAgentCertDir(agentID), fmt.Sprintf("%s-cert.pem", agentID))
+}
+
+func (s *Service) GetAgentKeyPath(agentID string) string {
+	return filepath.Join(s.GetAgentCertDir(agentID), fmt.Sprintf("%s-key.pem", agentID))
+}
+
+func (s *Service) AgentCertExists(agentID string) bool {
+	certPath := s.GetAgentCertPath(agentID)
+	keyPath := s.GetAgentKeyPath(agentID)
+	return fileExists(certPath) && fileExists(keyPath)
+}
+
+func (s *Service) GetAgentCert(agentID string) (certBytes, keyBytes []byte, err error) {
+	certPath := s.GetAgentCertPath(agentID)
+	keyPath := s.GetAgentKeyPath(agentID)
+
+	certBytes, err = os.ReadFile(certPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read agent certificate: %w", err)
+	}
+
+	keyBytes, err = os.ReadFile(keyPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read agent key: %w", err)
+	}
+
+	return certBytes, keyBytes, nil
+}
+
+func (s *Service) DeleteAgentCert(agentID string) error {
+	certDir := s.GetAgentCertDir(agentID)
+
+	if !fileExists(certDir) {
+		return fmt.Errorf("agent certificate directory does not exist")
+	}
+
+	if err := os.RemoveAll(certDir); err != nil {
+		return fmt.Errorf("failed to delete agent certificate directory: %w", err)
+	}
+
+	slog.Info("Deleted agent certificate", "agent_id", agentID, "path", certDir)
+	return nil
+}
+
+func (s *Service) ListAgentCerts() ([]string, error) {
+	if !fileExists(s.AgentCertDir) {
+		return []string{}, nil
+	}
+
+	entries, err := os.ReadDir(s.AgentCertDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read agent cert directory: %w", err)
+	}
+
+	var agentIDs []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			agentID := entry.Name()
+			if s.AgentCertExists(agentID) {
+				agentIDs = append(agentIDs, agentID)
+			}
+		}
+	}
+
+	return agentIDs, nil
 }

@@ -19,12 +19,23 @@ func SetupRoute(engine *gin.Engine, srvs *Services) {
 	healthHandler := handler.NewHealthHandler()
 	engine.GET("/health", healthHandler.Check)
 
-	if srvs.GrpcServer != nil {
-		adminHandler := handler.NewAdminHandler(srvs.GrpcServer)
-		engine.GET("/agents", adminHandler.ListAgents)
+	certHandler := handler.NewCertHandler(srvs.CertService)
+
+	agents := engine.Group("/agents")
+	{
+		if srvs.GrpcServer != nil {
+			adminHandler := handler.NewAdminHandler(srvs.GrpcServer)
+			agents.GET("", adminHandler.ListAgents)
+		}
+
+		agents.POST("/:id/certificate", certHandler.CreateAgentCertificate)
+		agents.GET("/:id/certificate", certHandler.GetAgentCertificate)
+		agents.DELETE("/:id/certificate", certHandler.DeleteAgentCertificate)
 	}
 
-	certHandler := handler.NewCertHandler(srvs.CertService)
-	engine.POST("/cert/agent", certHandler.ProvisionAgent)
-	engine.DELETE("/cert/server", certHandler.DeleteServerCerts)
+	cert := engine.Group("/cert")
+	{
+		cert.GET("/agents", certHandler.ListAgents)
+		cert.DELETE("/server", certHandler.DeleteServerCerts)
+	}
 }

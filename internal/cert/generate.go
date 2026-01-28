@@ -137,6 +137,23 @@ func (s *Service) GenerateAgentCert(agentID string) (*x509.Certificate, *rsa.Pri
 		return nil, nil, fmt.Errorf("failed to parse agent certificate: %w", err)
 	}
 
-	slog.Info("Generated agent certificate", "agent_id", agentID)
+	certPath := s.GetAgentCertPath(agentID)
+	keyPath := s.GetAgentKeyPath(agentID)
+
+	if err := s.ensureDirectory(certPath); err != nil {
+		return nil, nil, fmt.Errorf("failed to create agent cert directory: %w", err)
+	}
+
+	if err := writeCertToFile(agentCert, certPath); err != nil {
+		slog.Error("Failed to write agent certificate", "error", err, "path", certPath)
+		return nil, nil, fmt.Errorf("failed to write agent certificate: %w", err)
+	}
+
+	if err := writeKeyToFile(agentKey, keyPath); err != nil {
+		slog.Error("Failed to write agent key", "error", err, "path", keyPath)
+		return nil, nil, fmt.Errorf("failed to write agent key: %w", err)
+	}
+
+	slog.Info("Generated and saved agent certificate", "agent_id", agentID, "cert_path", certPath, "key_path", keyPath)
 	return agentCert, agentKey, nil
 }
