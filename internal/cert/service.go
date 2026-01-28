@@ -19,12 +19,7 @@ type Service struct {
 	IPAddresses    []net.IP
 }
 
-type Options struct {
-	DomainNames []string
-	IPAddresses []net.IP
-}
-
-func New(caCertPath, caKeyPath, serverCertPath, serverKeyPath string, opts *Options) (*Service, error) {
+func New(caCertPath, caKeyPath, serverCertPath, serverKeyPath, domainNamesConfig, IPAddressesConfig string) (*Service, error) {
 	s := &Service{
 		CaCertPath:     caCertPath,
 		CaKeyPath:      caKeyPath,
@@ -32,17 +27,20 @@ func New(caCertPath, caKeyPath, serverCertPath, serverKeyPath string, opts *Opti
 		ServerKeyPath:  serverKeyPath,
 	}
 
-	if opts != nil {
-		s.DomainNames = opts.DomainNames
-		s.IPAddresses = opts.IPAddresses
+	domainNames := ParseCommaSeparated(domainNamesConfig)
+	if len(domainNames) > 0 {
+		s.DomainNames = domainNames
 	}
 
-	if len(s.DomainNames) == 0 {
-		s.DomainNames = []string{"localhost"}
-	}
-
-	if len(s.IPAddresses) == 0 {
-		s.IPAddresses = []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")}
+	ipAddresses := ParseCommaSeparated(IPAddressesConfig)
+	if len(ipAddresses) > 0 {
+		for _, ipStr := range ipAddresses {
+			if ip := net.ParseIP(ipStr); ip != nil {
+				s.IPAddresses = append(s.IPAddresses, ip)
+			} else {
+				slog.Warn("Invalid IP address in configuration, skipping", "ip", ipStr)
+			}
+		}
 	}
 
 	if err := s.ensureCertificates(); err != nil {

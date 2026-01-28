@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -36,23 +35,6 @@ func main() {
 
 	var certService *cert.Service
 	if config.Grpc.TLS.Enabled {
-		certOpts := &cert.Options{}
-
-		domainNames := ParseCommaSeparated(config.Grpc.TLS.DomainNames)
-		if len(domainNames) > 0 {
-			certOpts.DomainNames = domainNames
-		}
-
-		ipAddresses := ParseCommaSeparated(config.Grpc.TLS.IPAddresses)
-		if len(ipAddresses) > 0 {
-			for _, ipStr := range ipAddresses {
-				if ip := net.ParseIP(ipStr); ip != nil {
-					certOpts.IPAddresses = append(certOpts.IPAddresses, ip)
-				} else {
-					slog.Warn("Invalid IP address in configuration, skipping", "ip", ipStr)
-				}
-			}
-		}
 
 		var err error
 		certService, err = cert.New(
@@ -60,7 +42,8 @@ func main() {
 			config.Grpc.TLS.CAKeyFile,
 			config.Grpc.TLS.CertFile,
 			config.Grpc.TLS.KeyFile,
-			certOpts,
+			config.Grpc.TLS.DomainNames,
+			config.Grpc.TLS.IPAddresses,
 		)
 		if err != nil {
 			slog.Error("Failed to initialize certificates", "error", err)

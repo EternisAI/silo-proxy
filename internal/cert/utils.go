@@ -7,7 +7,22 @@ import (
 	"encoding/pem"
 	"fmt"
 	"os"
+	"strings"
 )
+
+func ParseCommaSeparated(input string) []string {
+	if input == "" {
+		return nil
+	}
+	parts := strings.Split(input, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
+}
 
 func loadCA(certPath, keyPath string) (*x509.Certificate, *rsa.PrivateKey, error) {
 	certBytes, err := os.ReadFile(certPath)
