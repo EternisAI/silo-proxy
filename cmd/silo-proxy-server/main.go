@@ -81,13 +81,13 @@ func main() {
 	engine.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"*"},
 		AllowMethods:     []string{"PUT", "PATCH", "GET", "POST", "DELETE"},
-		AllowHeaders:     []string{"Origin", "Content-Length", "Content-Type", "Authorization"},
+		AllowHeaders:     []string{"Origin", "Content-Length", "Content-Type", "Authorization", "X-API-Key"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
 	engine.Use(gin.Recovery())
-	internalhttp.SetupRoute(engine, services)
+	internalhttp.SetupRoute(engine, services, config.Http.AdminAPIKey)
 
 	httpServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", config.Http.Port),

@@ -51,7 +51,7 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 	engine.Use(gin.Recovery())
-	internalhttp.SetupRoute(engine, services)
+	internalhttp.SetupRoute(engine, services, "")
 
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", config.Http.Port),

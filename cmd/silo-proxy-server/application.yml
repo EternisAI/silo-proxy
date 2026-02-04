@@ -2,6 +2,7 @@ log:
   level: debug
 http:
   port: 8080
+  admin_api_key: ""  # Required for certificate management endpoints
   agent_port_range:
     start: 8100
     end: 8100

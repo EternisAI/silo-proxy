@@ -13,13 +13,11 @@ type Services struct {
 	CertService *cert.Service
 }
 
-func SetupRoute(engine *gin.Engine, srvs *Services) {
+func SetupRoute(engine *gin.Engine, srvs *Services, adminAPIKey string) {
 	engine.Use(middleware.RequestLogger())
 
 	healthHandler := handler.NewHealthHandler()
 	engine.GET("/health", healthHandler.Check)
-
-	certHandler := handler.NewCertHandler(srvs.CertService)
 
 	agents := engine.Group("/agents")
 	{
@@ -28,11 +26,13 @@ func SetupRoute(engine *gin.Engine, srvs *Services) {
 			agents.GET("", adminHandler.ListAgents)
 		}
 
-		agents.POST("/:id/certificate", certHandler.CreateAgentCertificate)
-		agents.GET("/:id/certificate", certHandler.GetAgentCertificate)
-		agents.DELETE("/:id/certificate", certHandler.DeleteAgentCertificate)
+		certHandler := handler.NewCertHandler(srvs.CertService)
+		certRoutes := agents.Group("")
+		certRoutes.Use(middleware.APIKeyAuth(adminAPIKey))
+		{
+			certRoutes.POST("/:id/certificate", certHandler.CreateAgentCertificate)
+			certRoutes.GET("/:id/certificate", certHandler.GetAgentCertificate)
+			certRoutes.DELETE("/:id/certificate", certHandler.DeleteAgentCertificate)
+		}
 	}
-
-	// Temp endpoint for cleaning
-	engine.DELETE("/server-certs", certHandler.DeleteServerCerts)
 }
