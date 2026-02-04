@@ -16,6 +16,7 @@ import (
 func (h *CertHandler) validateAgentID(ctx *gin.Context) (string, bool) {
 	agentID := ctx.Param("id")
 	if err := cert.ValidateAgentID(agentID); err != nil {
+		slog.Warn("Invalid agent ID", "agent_id", agentID, "error", err)
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
 		})
@@ -49,6 +50,7 @@ func (h *CertHandler) CreateAgentCertificate(ctx *gin.Context) {
 	}
 
 	if h.certService.AgentCertExists(agentID) {
+		slog.Warn("Certificate already exists", "agent_id", agentID)
 		ctx.JSON(http.StatusConflict, gin.H{
 			"error": "Certificate already exists for this agent",
 		})
@@ -106,6 +108,7 @@ func (h *CertHandler) GetAgentCertificate(ctx *gin.Context) {
 	}
 
 	if !h.certService.AgentCertExists(agentID) {
+		slog.Warn("Certificate not found", "agent_id", agentID)
 		ctx.JSON(http.StatusNotFound, gin.H{
 			"error": "Certificate not found for this agent",
 		})
@@ -163,6 +166,7 @@ func (h *CertHandler) DeleteAgentCertificate(ctx *gin.Context) {
 	}
 
 	if !h.certService.AgentCertExists(agentID) {
+		slog.Warn("Certificate not found for deletion", "agent_id", agentID)
 		ctx.JSON(http.StatusNotFound, gin.H{
 			"error": "Certificate not found for this agent",
 		})
