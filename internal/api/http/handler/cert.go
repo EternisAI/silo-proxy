@@ -5,16 +5,25 @@ import (
 	"bytes"
 	"crypto/rsa"
 	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 
-	"github.com/EternisAI/silo-proxy/internal/api/http/dto"
 	"github.com/EternisAI/silo-proxy/internal/cert"
 	"github.com/gin-gonic/gin"
 )
+
+func (h *CertHandler) validateAgentID(ctx *gin.Context) (string, bool) {
+	agentID := ctx.Param("id")
+	if err := cert.ValidateAgentID(agentID); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+		return "", false
+	}
+	return agentID, true
+}
 
 type CertHandler struct {
 	certService *cert.Service
@@ -35,11 +44,8 @@ func (h *CertHandler) CreateAgentCertificate(ctx *gin.Context) {
 		return
 	}
 
-	agentID := ctx.Param("id")
-	if agentID == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": "agent_id is required",
-		})
+	agentID, ok := h.validateAgentID(ctx)
+	if !ok {
 		return
 	}
 
@@ -95,11 +101,8 @@ func (h *CertHandler) GetAgentCertificate(ctx *gin.Context) {
 		return
 	}
 
-	agentID := ctx.Param("id")
-	if agentID == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": "agent_id is required",
-		})
+	agentID, ok := h.validateAgentID(ctx)
+	if !ok {
 		return
 	}
 
@@ -130,37 +133,11 @@ func (h *CertHandler) GetAgentCertificate(ctx *gin.Context) {
 		return
 	}
 
-	zipBuffer := new(bytes.Buffer)
-	zipWriter := zip.NewWriter(zipBuffer)
-
-	files := map[string][]byte{
-		fmt.Sprintf("%s-cert.pem", agentID): agentCertBytes,
-		fmt.Sprintf("%s-key.pem", agentID):  agentKeyBytes,
-		"ca-cert.pem":                       caCertBytes,
-	}
-
-	for filename, content := range files {
-		f, err := zipWriter.Create(filename)
-		if err != nil {
-			slog.Error("Failed to create zip file entry", "error", err, "filename", filename)
-			ctx.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Failed to create zip file",
-			})
-			return
-		}
-		if _, err := f.Write(content); err != nil {
-			slog.Error("Failed to write to zip file", "error", err, "filename", filename)
-			ctx.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Failed to write zip file",
-			})
-			return
-		}
-	}
-
-	if err := zipWriter.Close(); err != nil {
-		slog.Error("Failed to close zip writer", "error", err)
+	zipBuffer, err := h.createCertZipFromBytes(agentID, agentCertBytes, agentKeyBytes, caCertBytes)
+	if err != nil {
+		slog.Error("Failed to create zip file", "error", err, "agent_id", agentID)
 		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to finalize zip file",
+			"error": "Failed to create zip file",
 		})
 		return
 	}
@@ -172,62 +149,6 @@ func (h *CertHandler) GetAgentCertificate(ctx *gin.Context) {
 	slog.Info("Agent certificate retrieved successfully", "agent_id", agentID, "zip_size", zipBuffer.Len())
 }
 
-func (h *CertHandler) ListAgents(ctx *gin.Context) {
-	if h.certService == nil {
-		slog.Warn("Agent list requested but TLS is disabled")
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": "TLS is not enabled on this server",
-		})
-		return
-	}
-
-	agentIDs, err := h.certService.ListAgentCerts()
-	if err != nil {
-		slog.Error("Failed to list agent certificates", "error", err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to list agent certificates",
-		})
-		return
-	}
-
-	agents := make([]dto.AgentCertInfo, 0, len(agentIDs))
-	for _, agentID := range agentIDs {
-		certPath := h.certService.GetAgentCertPath(agentID)
-		agentCertBytes, _, err := h.certService.GetAgentCert(agentID)
-		if err != nil {
-			slog.Warn("Failed to read agent certificate for listing", "error", err, "agent_id", agentID)
-			continue
-		}
-
-		block, _ := pem.Decode(agentCertBytes)
-		if block == nil {
-			slog.Warn("Failed to decode PEM certificate", "agent_id", agentID)
-			continue
-		}
-
-		cert, err := x509.ParseCertificate(block.Bytes)
-		if err != nil {
-			slog.Warn("Failed to parse certificate", "error", err, "agent_id", agentID)
-			continue
-		}
-
-		agents = append(agents, dto.AgentCertInfo{
-			AgentID:   agentID,
-			CreatedAt: cert.NotBefore,
-			ExpiresAt: cert.NotAfter,
-			CertPath:  certPath,
-		})
-	}
-
-	response := dto.ListAgentsResponse{
-		Agents: agents,
-		Count:  len(agents),
-	}
-
-	ctx.JSON(http.StatusOK, response)
-	slog.Info("Listed agent certificates", "count", len(agents))
-}
-
 func (h *CertHandler) DeleteAgentCertificate(ctx *gin.Context) {
 	if h.certService == nil {
 		slog.Warn("Agent cert deletion requested but TLS is disabled")
@@ -237,11 +158,8 @@ func (h *CertHandler) DeleteAgentCertificate(ctx *gin.Context) {
 		return
 	}
 
-	agentID := ctx.Param("id")
-	if agentID == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": "agent_id is required",
-		})
+	agentID, ok := h.validateAgentID(ctx)
+	if !ok {
 		return
 	}
 
@@ -263,12 +181,10 @@ func (h *CertHandler) DeleteAgentCertificate(ctx *gin.Context) {
 		return
 	}
 
-	response := dto.DeleteCertificateResponse{
-		Message:      "Successfully deleted agent certificate",
-		DeletedPaths: []string{certDir},
-	}
-
-	ctx.JSON(http.StatusOK, response)
+	ctx.JSON(http.StatusOK, gin.H{
+		"message":       "Successfully deleted agent certificate",
+		"deleted_paths": []string{certDir},
+	})
 	slog.Info("Agent certificate deleted successfully", "agent_id", agentID)
 }
 
@@ -283,12 +199,16 @@ func (h *CertHandler) createCertZip(agentID string, agentCert *x509.Certificate,
 		return nil, fmt.Errorf("failed to encode agent key: %w", err)
 	}
 
+	return h.createCertZipFromBytes(agentID, agentCertPEM, agentKeyPEM, caCertBytes)
+}
+
+func (h *CertHandler) createCertZipFromBytes(agentID string, certPEM, keyPEM, caCertBytes []byte) (*bytes.Buffer, error) {
 	zipBuffer := new(bytes.Buffer)
 	zipWriter := zip.NewWriter(zipBuffer)
 
 	files := map[string][]byte{
-		fmt.Sprintf("%s-cert.pem", agentID): agentCertPEM,
-		fmt.Sprintf("%s-key.pem", agentID):  agentKeyPEM,
+		fmt.Sprintf("%s-cert.pem", agentID): certPEM,
+		fmt.Sprintf("%s-key.pem", agentID):  keyPEM,
 		"ca-cert.pem":                       caCertBytes,
 	}
 

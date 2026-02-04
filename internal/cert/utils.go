@@ -7,8 +7,24 @@ import (
 	"encoding/pem"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 )
+
+var validAgentIDRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
+
+func ValidateAgentID(agentID string) error {
+	if agentID == "" {
+		return fmt.Errorf("agent ID cannot be empty")
+	}
+	if len(agentID) > 64 {
+		return fmt.Errorf("agent ID too long (max 64 characters)")
+	}
+	if !validAgentIDRegex.MatchString(agentID) {
+		return fmt.Errorf("agent ID contains invalid characters (allowed: alphanumeric, underscore, hyphen)")
+	}
+	return nil
+}
 
 func ParseCommaSeparated(input string) []string {
 	if input == "" {
