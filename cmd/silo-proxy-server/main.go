@@ -12,6 +12,7 @@ import (
 	"time"
 
 	internalhttp "github.com/EternisAI/silo-proxy/internal/api/http"
+	"github.com/EternisAI/silo-proxy/internal/cert"
 	grpcserver "github.com/EternisAI/silo-proxy/internal/grpc/server"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -30,6 +31,25 @@ func main() {
 		KeyFile:    config.Grpc.TLS.KeyFile,
 		CAFile:     config.Grpc.TLS.CAFile,
 		ClientAuth: config.Grpc.TLS.ClientAuth,
+	}
+
+	var certService *cert.Service
+	if config.Grpc.TLS.Enabled {
+
+		var err error
+		certService, err = cert.New(
+			config.Grpc.TLS.CAFile,
+			config.Grpc.TLS.CAKeyFile,
+			config.Grpc.TLS.CertFile,
+			config.Grpc.TLS.KeyFile,
+			config.Grpc.TLS.AgentCertDir,
+			config.Grpc.TLS.DomainNames,
+			config.Grpc.TLS.IPAddresses,
+		)
+		if err != nil {
+			slog.Error("Failed to initialize certificates", "error", err)
+			os.Exit(1)
+		}
 	}
 
 	grpcSrv := grpcserver.NewServer(config.Grpc.Port, tlsConfig)
@@ -52,7 +72,8 @@ func main() {
 		"pool_size", config.Http.AgentPortRange.End-config.Http.AgentPortRange.Start+1)
 
 	services := &internalhttp.Services{
-		GrpcServer: grpcSrv,
+		GrpcServer:  grpcSrv,
+		CertService: certService,
 	}
 
 	gin.SetMode(gin.ReleaseMode)
@@ -60,13 +81,13 @@ func main() {
 	engine.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"*"},
 		AllowMethods:     []string{"PUT", "PATCH", "GET", "POST", "DELETE"},
-		AllowHeaders:     []string{"Origin", "Content-Length", "Content-Type", "Authorization"},
+		AllowHeaders:     []string{"Origin", "Content-Length", "Content-Type", "Authorization", "X-API-Key"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
 	engine.Use(gin.Recovery())
-	internalhttp.SetupRoute(engine, services)
+	internalhttp.SetupRoute(engine, services, config.Http.AdminAPIKey)
 
 	httpServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", config.Http.Port),

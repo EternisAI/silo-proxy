@@ -22,11 +22,15 @@ type GrpcConfig struct {
 }
 
 type TLSConfig struct {
-	Enabled    bool   `mapstructure:"enabled"`
-	CertFile   string `mapstructure:"cert_file"`
-	KeyFile    string `mapstructure:"key_file"`
-	CAFile     string `mapstructure:"ca_file"`
-	ClientAuth string `mapstructure:"client_auth"`
+	Enabled      bool   `mapstructure:"enabled"`
+	CertFile     string `mapstructure:"cert_file"`
+	KeyFile      string `mapstructure:"key_file"`
+	CAFile       string `mapstructure:"ca_file"`
+	CAKeyFile    string `mapstructure:"ca_key_file"`
+	ClientAuth   string `mapstructure:"client_auth"`
+	DomainNames  string `mapstructure:"domain_names"`
+	IPAddresses  string `mapstructure:"ip_addresses"`
+	AgentCertDir string `mapstructure:"agent_cert_dir"`
 }
 
 var config Config

@@ -2,6 +2,7 @@ log:
   level: debug
 http:
   port: 8080
+  admin_api_key: ""  # Required for certificate management endpoints
   agent_port_range:
     start: 8100
     end: 8100
@@ -12,4 +13,8 @@ grpc:
     cert_file: ./certs/server/server-cert.pem
     key_file: ./certs/server/server-key.pem
     ca_file: ./certs/ca/ca-cert.pem
+    ca_key_file: ./certs/ca/ca-key.pem
     client_auth: require
+    domain_names: "localhost"
+    ip_addresses: "127.0.0.1"
+    agent_cert_dir: ./certs/agents
