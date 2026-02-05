@@ -226,5 +226,9 @@ func (h *CertHandler) createCertZipFromBytes(agentID string, certPEM, keyPEM, ca
 		}
 	}
 
+	if err := zipWriter.Close(); err != nil {
+		return nil, fmt.Errorf("failed to finalize zip archive: %w", err)
+	}
+
 	return zipBuffer, nil
 }
