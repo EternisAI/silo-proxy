@@ -208,6 +208,7 @@ func (h *CertHandler) createCertZip(agentID string, agentCert *x509.Certificate,
 func (h *CertHandler) createCertZipFromBytes(agentID string, certPEM, keyPEM, caCertBytes []byte) (*bytes.Buffer, error) {
 	zipBuffer := new(bytes.Buffer)
 	zipWriter := zip.NewWriter(zipBuffer)
+	defer zipWriter.Close()
 
 	files := map[string][]byte{
 		fmt.Sprintf("%s-cert.pem", agentID): certPEM,
@@ -223,10 +224,6 @@ func (h *CertHandler) createCertZipFromBytes(agentID string, certPEM, keyPEM, ca
 		if _, err := f.Write(content); err != nil {
 			return nil, fmt.Errorf("failed to write zip entry for %s: %w", filename, err)
 		}
-	}
-
-	if err := zipWriter.Close(); err != nil {
-		return nil, fmt.Errorf("failed to close zip writer: %w", err)
 	}
 
 	return zipBuffer, nil
