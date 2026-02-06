@@ -11,7 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	internalhttp "github.com/EternisAI/silo-proxy/internal/api/http"
+	"github.com/EternisAI/silo-proxy/internal/api/http/handler"
+	"github.com/EternisAI/silo-proxy/internal/api/http/middleware"
 	grpcclient "github.com/EternisAI/silo-proxy/internal/grpc/client"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -38,8 +39,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	services := &internalhttp.Services{}
-
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	engine.Use(cors.New(cors.Config{
@@ -51,7 +50,8 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 	engine.Use(gin.Recovery())
-	internalhttp.SetupRoute(engine, services, "", "")
+	engine.Use(middleware.RequestLogger())
+	engine.GET("/health", handler.NewHealthHandler().Check)
 
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", config.Http.Port),
