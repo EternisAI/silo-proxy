@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/EternisAI/silo-proxy/internal/api/http"
+	"github.com/EternisAI/silo-proxy/internal/db"
 	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )
@@ -14,6 +15,13 @@ type Config struct {
 	Log  LogConfig
 	Http http.Config
 	Grpc GrpcConfig
+	DB   db.Config    `mapstructure:"db"`
+	JWT  JWTConfig    `mapstructure:"jwt"`
+}
+
+type JWTConfig struct {
+	Secret            string `mapstructure:"secret"`
+	ExpirationMinutes int    `mapstructure:"expiration_minutes"`
 }
 
 type GrpcConfig struct {

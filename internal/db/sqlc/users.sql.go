@@ -11,6 +11,32 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createUser = `-- name: CreateUser :one
+INSERT INTO users (username, password_hash, role)
+VALUES ($1, $2, $3)
+RETURNING id, username, password_hash, role, created_at, updated_at
+`
+
+type CreateUserParams struct {
+	Username     string   `json:"username"`
+	PasswordHash string   `json:"password_hash"`
+	Role         UserRole `json:"role"`
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
+	row := q.db.QueryRow(ctx, createUser, arg.Username, arg.PasswordHash, arg.Role)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.PasswordHash,
+		&i.Role,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUser = `-- name: GetUser :one
 SELECT id, username, password_hash, role, created_at, updated_at FROM users
 WHERE id = $1 LIMIT 1
