@@ -53,6 +53,22 @@ func (ns NullUserRole) Value() (driver.Value, error) {
 	return string(ns.UserRole), nil
 }
 
+type AgentCertificate struct {
+	ID                pgtype.UUID      `json:"id"`
+	UserID            pgtype.UUID      `json:"user_id"`
+	AgentID           string           `json:"agent_id"`
+	SerialNumber      string           `json:"serial_number"`
+	SubjectCommonName string           `json:"subject_common_name"`
+	NotBefore         pgtype.Timestamp `json:"not_before"`
+	NotAfter          pgtype.Timestamp `json:"not_after"`
+	CertPem           string           `json:"cert_pem"`
+	KeyPem            string           `json:"key_pem"`
+	IsActive          bool             `json:"is_active"`
+	RevokedAt         pgtype.Timestamp `json:"revoked_at"`
+	RevokedReason     pgtype.Text      `json:"revoked_reason"`
+	CreatedAt         pgtype.Timestamp `json:"created_at"`
+}
+
 type User struct {
 	ID           pgtype.UUID      `json:"id"`
 	Username     string           `json:"username"`
