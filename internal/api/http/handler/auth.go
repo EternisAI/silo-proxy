@@ -17,10 +17,10 @@ import (
 
 type AuthHandler struct {
 	queries   *sqlc.Queries
-	jwtConfig auth.JWTConfig
+	jwtConfig auth.Config
 }
 
-func NewAuthHandler(queries *sqlc.Queries, jwtConfig auth.JWTConfig) *AuthHandler {
+func NewAuthHandler(queries *sqlc.Queries, jwtConfig auth.Config) *AuthHandler {
 	return &AuthHandler{
 		queries:   queries,
 		jwtConfig: jwtConfig,

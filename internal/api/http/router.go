@@ -14,7 +14,7 @@ type Services struct {
 	GrpcServer  *grpcserver.Server
 	CertService *cert.Service
 	Queries     *sqlc.Queries
-	JWTConfig   auth.JWTConfig
+	JWTConfig   auth.Config
 }
 
 func SetupRoute(engine *gin.Engine, srvs *Services, adminAPIKey string) {

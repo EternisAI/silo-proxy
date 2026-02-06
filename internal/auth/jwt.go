@@ -14,19 +14,23 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-type JWTConfig struct {
-	Secret     string
-	Expiration time.Duration
+type Config struct {
+	Secret            string `mapstructure:"secret"`
+	ExpirationMinutes int    `mapstructure:"expiration_minutes"`
 }
 
-func GenerateToken(cfg JWTConfig, userID, username, role string) (string, error) {
+func (c Config) expiration() time.Duration {
+	return time.Duration(c.ExpirationMinutes) * time.Minute
+}
+
+func GenerateToken(cfg Config, userID, username, role string) (string, error) {
 	now := time.Now()
 	claims := Claims{
 		UserID:   userID,
 		Username: username,
 		Role:     role,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(now.Add(cfg.Expiration)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(cfg.expiration())),
 			IssuedAt:  jwt.NewNumericDate(now),
 		},
 	}
