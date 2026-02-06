@@ -11,7 +11,7 @@ LDFLAGS 		:= -ldflags "-X main.AppVersion=$(VERSION)"
 
 all: clean build
 
-install:
+dep:
 	go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.29.0
 clean:
 	$(GO) clean -testcache
@@ -27,7 +27,7 @@ run-agent:
 	$(GO) run $(LDFLAGS) cmd/$(AGENT)/*.go
 test:
 	$(GO) test -v ./...
-generate: install
+generate: 
 	sqlc generate
 docker: docker-server
 docker-server:
