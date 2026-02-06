@@ -1,9 +1,12 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"embed"
+	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -28,6 +31,13 @@ func RunMigrations(dbURL string, schema string) error {
 		return err
 	}
 	defer db.Close()
+
+	// Verify connectivity before running migrations
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := db.PingContext(ctx); err != nil {
+		return fmt.Errorf("unable to connect to database: %w", err)
+	}
 
 	// Create schema if it doesn't exist and set search_path
 	if err := ensureSchemaExists(db, schema); err != nil {
