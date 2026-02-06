@@ -12,8 +12,12 @@ import (
 	"time"
 
 	internalhttp "github.com/EternisAI/silo-proxy/internal/api/http"
+	"github.com/EternisAI/silo-proxy/internal/auth"
 	"github.com/EternisAI/silo-proxy/internal/cert"
+	"github.com/EternisAI/silo-proxy/internal/db"
+	"github.com/EternisAI/silo-proxy/internal/db/sqlc"
 	grpcserver "github.com/EternisAI/silo-proxy/internal/grpc/server"
+	"github.com/EternisAI/silo-proxy/internal/users"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
@@ -24,6 +28,23 @@ func main() {
 	InitConfig()
 
 	slog.Info("Silo Proxy Server", "version", AppVersion)
+
+	// Initialize database
+	if err := db.RunMigrations(config.DB.Url, config.DB.Schema); err != nil {
+		slog.Error("Failed to run migrations", "error", err)
+		os.Exit(1)
+	}
+
+	dbPool, err := db.InitDB(context.Background(), config.DB.Url, config.DB.Schema)
+	if err != nil {
+		slog.Error("Failed to initialize database", "error", err)
+		os.Exit(1)
+	}
+	defer dbPool.Close()
+
+	queries := sqlc.New(dbPool)
+	authService := auth.NewService(queries, config.JWT)
+	userService := users.NewService(queries)
 
 	tlsConfig := &grpcserver.TLSConfig{
 		Enabled:    config.Grpc.TLS.Enabled,
@@ -74,6 +95,8 @@ func main() {
 	services := &internalhttp.Services{
 		GrpcServer:  grpcSrv,
 		CertService: certService,
+		AuthService: authService,
+		UserService: userService,
 	}
 
 	gin.SetMode(gin.ReleaseMode)
@@ -87,7 +110,7 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 	engine.Use(gin.Recovery())
-	internalhttp.SetupRoute(engine, services, config.Http.AdminAPIKey)
+	internalhttp.SetupRoute(engine, services, config.Http.AdminAPIKey, config.JWT.Secret)
 
 	httpServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", config.Http.Port),

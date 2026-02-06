@@ -1,5 +1,11 @@
 log:
   level: debug
+db:
+  url: "postgres://postgres:postgres@localhost:5432/silo?sslmode=disable"
+  schema: "public"
+jwt:
+  secret: "change-me-to-a-random-secret"
+  expiration_minutes: 1440
 http:
   port: 8080
   admin_api_key: ""  # Required for certificate management endpoints

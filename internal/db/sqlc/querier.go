@@ -11,9 +11,12 @@ import (
 )
 
 type Querier interface {
+	CountUsers(ctx context.Context) (int64, error)
+	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	DeleteUser(ctx context.Context, id pgtype.UUID) error
 	GetUser(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
-	ListUsers(ctx context.Context) ([]User, error)
+	ListUsersPaginated(ctx context.Context, arg ListUsersPaginatedParams) ([]User, error)
 }
 
 var _ Querier = (*Queries)(nil)
