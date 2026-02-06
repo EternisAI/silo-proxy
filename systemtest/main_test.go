@@ -9,6 +9,7 @@ import (
 	"github.com/EternisAI/silo-proxy/internal/auth"
 	"github.com/EternisAI/silo-proxy/internal/db"
 	"github.com/EternisAI/silo-proxy/internal/db/sqlc"
+	"github.com/EternisAI/silo-proxy/internal/users"
 	"github.com/EternisAI/silo-proxy/systemtest/postgres"
 	"github.com/EternisAI/silo-proxy/systemtest/tests"
 	"github.com/gin-gonic/gin"
@@ -45,16 +46,20 @@ func TestSystemIntegration(t *testing.T) {
 	queries := sqlc.New(pool)
 
 	authService := auth.NewService(queries, auth.Config{Secret: jwtSecret, ExpirationMinutes: 60})
+	userService := users.NewService(queries)
 
 	services := &http.Services{
 		AuthService: authService,
+		UserService: userService,
 	}
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	http.SetupRoute(engine, services, "admin-api-key")
+	http.SetupRoute(engine, services, "admin-api-key", jwtSecret)
 
 	t.Run("HealthCheck", func(t *testing.T) { tests.TestHealthCheck(t, engine) })
 	t.Run("Register", func(t *testing.T) { tests.TestRegister(t, engine, jwtSecret) })
 	t.Run("Login", func(t *testing.T) { tests.TestLogin(t, engine, jwtSecret) })
+	t.Run("DeleteUser", func(t *testing.T) { tests.TestDeleteUser(t, engine, jwtSecret) })
+	t.Run("ListUsers", func(t *testing.T) { tests.TestListUsers(t, engine, jwtSecret) })
 }

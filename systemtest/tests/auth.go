@@ -85,10 +85,104 @@ func TestLogin(t *testing.T, router *gin.Engine, jwtSecret string) {
 	})
 }
 
+func TestDeleteUser(t *testing.T, router *gin.Engine, jwtSecret string) {
+	// Register a user
+	regBody := dto.RegisterRequest{Username: "deleteuser", Password: "password123"}
+	rr := doJSON(router, "POST", "/auth/register", regBody)
+	require.Equal(t, http.StatusCreated, rr.Code)
+
+	// Login to get a token
+	loginBody := dto.LoginRequest{Username: "deleteuser", Password: "password123"}
+	rr = doJSON(router, "POST", "/auth/login", loginBody)
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	var loginResp dto.LoginResponse
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &loginResp))
+
+	t.Run("success", func(t *testing.T) {
+		rr := doJSONWithAuth(router, "DELETE", "/users/me", nil, loginResp.Token)
+		assert.Equal(t, http.StatusNoContent, rr.Code)
+	})
+
+	t.Run("login fails after deletion", func(t *testing.T) {
+		rr := doJSON(router, "POST", "/auth/login", loginBody)
+		assert.Equal(t, http.StatusUnauthorized, rr.Code)
+	})
+
+	t.Run("401 without token", func(t *testing.T) {
+		rr := doJSON(router, "DELETE", "/users/me", nil)
+		assert.Equal(t, http.StatusUnauthorized, rr.Code)
+	})
+}
+
+func TestListUsers(t *testing.T, router *gin.Engine, jwtSecret string) {
+	// Login as root (admin)
+	loginBody := dto.LoginRequest{Username: "root", Password: "changeme"}
+	rr := doJSON(router, "POST", "/auth/login", loginBody)
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	var loginResp dto.LoginResponse
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &loginResp))
+
+	t.Run("success", func(t *testing.T) {
+		rr := doJSONWithAuth(router, "GET", "/users", nil, loginResp.Token)
+		assert.Equal(t, http.StatusOK, rr.Code)
+
+		var resp dto.ListUsersResponse
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+		assert.GreaterOrEqual(t, resp.Total, int64(1))
+		assert.Equal(t, 1, resp.Page)
+		assert.Equal(t, 20, resp.PageSize)
+		assert.NotEmpty(t, resp.Users)
+	})
+
+	t.Run("with pagination params", func(t *testing.T) {
+		rr := doJSONWithAuth(router, "GET", "/users?page=1&page_size=2", nil, loginResp.Token)
+		assert.Equal(t, http.StatusOK, rr.Code)
+
+		var resp dto.ListUsersResponse
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+		assert.Equal(t, 1, resp.Page)
+		assert.Equal(t, 2, resp.PageSize)
+	})
+
+	t.Run("403 for non-admin", func(t *testing.T) {
+		// Register a regular user
+		regBody := dto.RegisterRequest{Username: "regularuser", Password: "password123"}
+		rr := doJSON(router, "POST", "/auth/register", regBody)
+		require.Equal(t, http.StatusCreated, rr.Code)
+
+		loginBody := dto.LoginRequest{Username: "regularuser", Password: "password123"}
+		rr = doJSON(router, "POST", "/auth/login", loginBody)
+		require.Equal(t, http.StatusOK, rr.Code)
+
+		var resp dto.LoginResponse
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+
+		rr = doJSONWithAuth(router, "GET", "/users", nil, resp.Token)
+		assert.Equal(t, http.StatusForbidden, rr.Code)
+	})
+
+	t.Run("401 without token", func(t *testing.T) {
+		rr := doJSON(router, "GET", "/users", nil)
+		assert.Equal(t, http.StatusUnauthorized, rr.Code)
+	})
+}
+
 func doJSON(router *gin.Engine, method, path string, body any) *httptest.ResponseRecorder {
 	b, _ := json.Marshal(body)
 	req := httptest.NewRequest(method, path, bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	return rr
+}
+
+func doJSONWithAuth(router *gin.Engine, method, path string, body any, token string) *httptest.ResponseRecorder {
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(method, path, bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 	return rr

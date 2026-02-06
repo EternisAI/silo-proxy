@@ -11,6 +11,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countUsers = `-- name: CountUsers :one
+SELECT count(*) FROM users
+`
+
+func (q *Queries) CountUsers(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countUsers)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (username, password_hash, role)
 VALUES ($1, $2, $3)
@@ -35,6 +46,15 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const deleteUser = `-- name: DeleteUser :exec
+DELETE FROM users WHERE id = $1
+`
+
+func (q *Queries) DeleteUser(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUser, id)
+	return err
 }
 
 const getUser = `-- name: GetUser :one
@@ -75,13 +95,17 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 	return i, err
 }
 
-const listUsers = `-- name: ListUsers :many
-SELECT id, username, password_hash, role, created_at, updated_at FROM users
-ORDER BY created_at DESC
+const listUsersPaginated = `-- name: ListUsersPaginated :many
+SELECT id, username, password_hash, role, created_at, updated_at FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
-func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
-	rows, err := q.db.Query(ctx, listUsers)
+type ListUsersPaginatedParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+func (q *Queries) ListUsersPaginated(ctx context.Context, arg ListUsersPaginatedParams) ([]User, error) {
+	rows, err := q.db.Query(ctx, listUsersPaginated, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
