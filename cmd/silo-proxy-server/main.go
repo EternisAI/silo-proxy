@@ -66,6 +66,7 @@ func main() {
 			config.Grpc.TLS.AgentCertDir,
 			config.Grpc.TLS.DomainNames,
 			config.Grpc.TLS.IPAddresses,
+			dbPool,
 		)
 		if err != nil {
 			slog.Error("Failed to initialize certificates", "error", err)

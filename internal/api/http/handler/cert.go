@@ -11,6 +11,7 @@ import (
 
 	"github.com/EternisAI/silo-proxy/internal/cert"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func (h *CertHandler) validateAgentID(ctx *gin.Context) (string, bool) {
@@ -49,21 +50,32 @@ func (h *CertHandler) CreateAgentCertificate(ctx *gin.Context) {
 		return
 	}
 
-	if h.certService.AgentCertExists(agentID) {
-		slog.Warn("Certificate already exists", "agent_id", agentID)
-		ctx.JSON(http.StatusConflict, gin.H{
-			"error": "Certificate already exists for this agent",
+	var req struct {
+		UserID string `json:"user_id" binding:"required"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": "user_id is required in request body",
 		})
 		return
 	}
 
-	slog.Info("Creating agent certificate", "agent_id", agentID)
+	var userID pgtype.UUID
+	if err := userID.Scan(req.UserID); err != nil {
+		slog.Error("Failed to parse user ID", "error", err, "user_id", req.UserID)
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid user_id format",
+		})
+		return
+	}
 
-	agentCert, agentKey, err := h.certService.GenerateAgentCert(agentID)
+	slog.Info("Creating agent certificate", "agent_id", agentID, "user_id", userID)
+
+	agentCert, agentKey, err := h.certService.GenerateAgentCertWithDB(ctx, agentID, userID)
 	if err != nil {
 		slog.Error("Failed to generate agent certificate", "error", err, "agent_id", agentID)
 		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to generate agent certificate",
+			"error": err.Error(),
 		})
 		return
 	}
@@ -107,21 +119,13 @@ func (h *CertHandler) GetAgentCertificate(ctx *gin.Context) {
 		return
 	}
 
-	if !h.certService.AgentCertExists(agentID) {
-		slog.Warn("Certificate not found", "agent_id", agentID)
-		ctx.JSON(http.StatusNotFound, gin.H{
-			"error": "Certificate not found for this agent",
-		})
-		return
-	}
-
 	slog.Info("Retrieving agent certificate", "agent_id", agentID)
 
-	agentCertBytes, agentKeyBytes, err := h.certService.GetAgentCert(agentID)
+	agentCertBytes, agentKeyBytes, err := h.certService.GetAgentCertFromDB(ctx, agentID)
 	if err != nil {
 		slog.Error("Failed to read agent certificate", "error", err, "agent_id", agentID)
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to read agent certificate",
+		ctx.JSON(http.StatusNotFound, gin.H{
+			"error": "Certificate not found for this agent",
 		})
 		return
 	}
@@ -165,30 +169,127 @@ func (h *CertHandler) DeleteAgentCertificate(ctx *gin.Context) {
 		return
 	}
 
-	if !h.certService.AgentCertExists(agentID) {
-		slog.Warn("Certificate not found for deletion", "agent_id", agentID)
-		ctx.JSON(http.StatusNotFound, gin.H{
-			"error": "Certificate not found for this agent",
+	userIDStr := ctx.Query("user_id")
+	if userIDStr == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": "user_id query parameter is required",
 		})
 		return
 	}
 
-	slog.Info("Deleting agent certificate", "agent_id", agentID)
+	var userID pgtype.UUID
+	if err := userID.Scan(userIDStr); err != nil {
+		slog.Error("Failed to parse user ID", "error", err, "user_id", userIDStr)
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid user_id format",
+		})
+		return
+	}
 
-	certDir := h.certService.GetAgentCertDir(agentID)
-	if err := h.certService.DeleteAgentCert(agentID); err != nil {
+	slog.Info("Deleting agent certificate", "agent_id", agentID, "user_id", userID)
+
+	if err := h.certService.DeleteAgentCertFromDB(ctx, agentID, userID); err != nil {
 		slog.Error("Failed to delete agent certificate", "error", err, "agent_id", agentID)
 		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to delete agent certificate",
+			"error": err.Error(),
 		})
 		return
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"message":       "Successfully deleted agent certificate",
-		"deleted_paths": []string{certDir},
+		"message": "Successfully deleted agent certificate",
 	})
 	slog.Info("Agent certificate deleted successfully", "agent_id", agentID)
+}
+
+func (h *CertHandler) RevokeAgentCertificate(ctx *gin.Context) {
+	if h.certService == nil {
+		slog.Warn("Agent cert revocation requested but TLS is disabled")
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": "TLS is not enabled on this server",
+		})
+		return
+	}
+
+	agentID, ok := h.validateAgentID(ctx)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		UserID string `json:"user_id" binding:"required"`
+		Reason string `json:"reason"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": "user_id is required in request body",
+		})
+		return
+	}
+
+	var userID pgtype.UUID
+	if err := userID.Scan(req.UserID); err != nil {
+		slog.Error("Failed to parse user ID", "error", err, "user_id", req.UserID)
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid user_id format",
+		})
+		return
+	}
+
+	slog.Info("Revoking agent certificate", "agent_id", agentID, "user_id", userID, "reason", req.Reason)
+
+	if err := h.certService.RevokeAgentCert(ctx, agentID, userID, req.Reason); err != nil {
+		slog.Error("Failed to revoke agent certificate", "error", err, "agent_id", agentID)
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "Successfully revoked agent certificate",
+	})
+	slog.Info("Agent certificate revoked successfully", "agent_id", agentID)
+}
+
+func (h *CertHandler) ListUserAgentCertificates(ctx *gin.Context) {
+	if h.certService == nil {
+		slog.Warn("Agent cert list requested but TLS is disabled")
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": "TLS is not enabled on this server",
+		})
+		return
+	}
+
+	userIDStr := ctx.Query("user_id")
+	if userIDStr == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": "user_id query parameter is required",
+		})
+		return
+	}
+
+	var userID pgtype.UUID
+	if err := userID.Scan(userIDStr); err != nil {
+		slog.Error("Failed to parse user ID", "error", err, "user_id", userIDStr)
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid user_id format",
+		})
+		return
+	}
+
+	certs, err := h.certService.ListUserAgentCerts(ctx, userID)
+	if err != nil {
+		slog.Error("Failed to list certificates", "error", err, "user_id", userID)
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to list certificates",
+		})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"certificates": certs,
+	})
 }
 
 func (h *CertHandler) createCertZip(agentID string, agentCert *x509.Certificate, agentKey *rsa.PrivateKey, caCertBytes []byte) (*bytes.Buffer, error) {
