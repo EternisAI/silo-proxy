@@ -1,6 +1,7 @@
 package cert
 
 import (
+	"context"
 	"crypto/rsa"
 	"crypto/x509"
 	"fmt"
@@ -8,6 +9,10 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/EternisAI/silo-proxy/internal/db/sqlc"
 )
 
 type Service struct {
@@ -18,15 +23,19 @@ type Service struct {
 	AgentCertDir   string
 	DomainNames    []string
 	IPAddresses    []net.IP
+	db             *pgxpool.Pool
+	queries        *sqlc.Queries
 }
 
-func New(caCertPath, caKeyPath, serverCertPath, serverKeyPath, agentCertDir, domainNamesConfig, IPAddressesConfig string) (*Service, error) {
+func New(caCertPath, caKeyPath, serverCertPath, serverKeyPath, agentCertDir, domainNamesConfig, IPAddressesConfig string, db *pgxpool.Pool) (*Service, error) {
 	s := &Service{
 		CaCertPath:     caCertPath,
 		CaKeyPath:      caKeyPath,
 		ServerCertPath: serverCertPath,
 		ServerKeyPath:  serverKeyPath,
 		AgentCertDir:   agentCertDir,
+		db:             db,
+		queries:        sqlc.New(db),
 	}
 
 	domainNames := ParseCommaSeparated(domainNamesConfig)
@@ -228,4 +237,131 @@ func (s *Service) ListAgentCerts() ([]string, error) {
 	}
 
 	return agentIDs, nil
+}
+
+func (s *Service) GenerateAgentCertWithDB(ctx context.Context, agentID string, userID pgtype.UUID) (*x509.Certificate, *rsa.PrivateKey, error) {
+	if err := ValidateAgentID(agentID); err != nil {
+		return nil, nil, fmt.Errorf("invalid agent ID: %w", err)
+	}
+
+	existingCert, err := s.queries.GetCertificateByAgentID(ctx, agentID)
+	if err == nil {
+		return nil, nil, fmt.Errorf("certificate already exists for agent %s", existingCert.AgentID)
+	}
+
+	agentCert, agentKey, err := s.GenerateAgentCert(agentID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to generate certificate: %w", err)
+	}
+
+	certPEM, err := CertToPEM(agentCert)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to encode certificate: %w", err)
+	}
+
+	keyPEM, err := KeyToPEM(agentKey)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to encode key: %w", err)
+	}
+
+	serialNumberStr := agentCert.SerialNumber.String()
+
+	_, err = s.queries.CreateAgentCertificate(ctx, sqlc.CreateAgentCertificateParams{
+		UserID:            userID,
+		AgentID:           agentID,
+		SerialNumber:      serialNumberStr,
+		SubjectCommonName: agentCert.Subject.CommonName,
+		NotBefore: pgtype.Timestamp{
+			Time:  agentCert.NotBefore,
+			Valid: true,
+		},
+		NotAfter: pgtype.Timestamp{
+			Time:  agentCert.NotAfter,
+			Valid: true,
+		},
+		CertPem: string(certPEM),
+		KeyPem:  string(keyPEM),
+	})
+	if err != nil {
+		if deleteErr := s.DeleteAgentCert(agentID); deleteErr != nil {
+			slog.Error("Failed to cleanup agent certificate after DB insert failure", "error", deleteErr, "agent_id", agentID)
+		}
+		return nil, nil, fmt.Errorf("failed to store certificate in database: %w", err)
+	}
+
+	slog.Info("Generated and stored agent certificate", "agent_id", agentID, "user_id", userID)
+	return agentCert, agentKey, nil
+}
+
+func (s *Service) GetAgentCertFromDB(ctx context.Context, agentID string) (certBytes, keyBytes []byte, err error) {
+	cert, err := s.queries.GetCertificateByAgentID(ctx, agentID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("certificate not found in database: %w", err)
+	}
+
+	return []byte(cert.CertPem), []byte(cert.KeyPem), nil
+}
+
+func (s *Service) DeleteAgentCertFromDB(ctx context.Context, agentID string, userID pgtype.UUID) error {
+	cert, err := s.queries.GetCertificateByAgentID(ctx, agentID)
+	if err != nil {
+		return fmt.Errorf("certificate not found: %w", err)
+	}
+
+	if cert.UserID != userID {
+		return fmt.Errorf("permission denied: certificate belongs to different user")
+	}
+
+	if err := s.queries.DeleteCertificate(ctx, agentID); err != nil {
+		return fmt.Errorf("failed to delete certificate from database: %w", err)
+	}
+
+	if err := s.DeleteAgentCert(agentID); err != nil {
+		slog.Warn("Failed to delete certificate files from filesystem", "error", err, "agent_id", agentID)
+	}
+
+	slog.Info("Deleted agent certificate", "agent_id", agentID, "user_id", userID)
+	return nil
+}
+
+func (s *Service) RevokeAgentCert(ctx context.Context, agentID string, userID pgtype.UUID, reason string) error {
+	cert, err := s.queries.GetCertificateByAgentID(ctx, agentID)
+	if err != nil {
+		return fmt.Errorf("certificate not found: %w", err)
+	}
+
+	if cert.UserID != userID {
+		return fmt.Errorf("permission denied: certificate belongs to different user")
+	}
+
+	_, err = s.queries.RevokeCertificate(ctx, sqlc.RevokeCertificateParams{
+		AgentID: agentID,
+		RevokedReason: pgtype.Text{
+			String: reason,
+			Valid:  true,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to revoke certificate: %w", err)
+	}
+
+	slog.Info("Revoked agent certificate", "agent_id", agentID, "user_id", userID, "reason", reason)
+	return nil
+}
+
+func (s *Service) ValidateAgentCert(ctx context.Context, agentID string) (bool, error) {
+	cert, err := s.queries.CheckCertificateValid(ctx, agentID)
+	if err != nil {
+		return false, fmt.Errorf("certificate validation failed: %w", err)
+	}
+
+	return cert.IsActive && !cert.RevokedAt.Valid, nil
+}
+
+func (s *Service) ListUserAgentCerts(ctx context.Context, userID pgtype.UUID) ([]sqlc.AgentCertificate, error) {
+	certs, err := s.queries.ListCertificatesByUser(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list certificates: %w", err)
+	}
+	return certs, nil
 }
