@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 
-INSERT INTO users (username, password_hash, role) VALUES ('root', 'root', 'Admin');
+-- Default root user with bcrypt hashed password: 'changeme'
+INSERT INTO users (username, password_hash, role) VALUES ('root', '$2a$10$uejoNCSLZ9YkKOZriLlSGeg0pm/nuGVS3nRuSPyYuk/Z7HJHKBhGO', 'Admin');
 -- +goose StatementEnd
 
 -- +goose Down
