@@ -76,7 +76,7 @@ func TestUserCRUD(t *testing.T, router *gin.Engine, jwtSecret string) {
 		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &loginResp))
 
 		rr = doJSONWithAuth(router, "DELETE", "/users/me", nil, loginResp.Token)
-		assert.Equal(t, http.StatusNoContent, rr.Code)
+		require.Equal(t, http.StatusNoContent, rr.Code)
 
 		// Login fails after deletion
 		rr = doJSON(router, "POST", "/auth/login", loginBody)

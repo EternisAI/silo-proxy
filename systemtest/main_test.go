@@ -13,7 +13,7 @@ import (
 	"github.com/EternisAI/silo-proxy/systemtest/postgres"
 	"github.com/EternisAI/silo-proxy/systemtest/tests"
 	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSystemIntegration(t *testing.T) {
@@ -25,22 +25,22 @@ func TestSystemIntegration(t *testing.T) {
 	jwtSecret := "test-jwt-secret-for-system-tests-only"
 
 	container, err := postgres.StartPostgres(context.Background(), dbUser, dbPassword, dbName)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	defer func() {
 		err := postgres.TerminatePostgres(context.Background(), container)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	}()
 
 	port, err := container.MappedPort(context.Background(), "5432/tcp")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	dbURL := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable", dbUser, dbPassword, dbHost, port.Int(), dbName)
 
 	err = db.RunMigrations(dbURL, schema)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	pool, err := db.InitDB(context.Background(), dbURL, schema)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	defer pool.Close()
 
 	queries := sqlc.New(pool)
