@@ -12,6 +12,7 @@ import (
 	"time"
 
 	internalhttp "github.com/EternisAI/silo-proxy/internal/api/http"
+	"github.com/EternisAI/silo-proxy/internal/auth"
 	"github.com/EternisAI/silo-proxy/internal/cert"
 	"github.com/EternisAI/silo-proxy/internal/db"
 	"github.com/EternisAI/silo-proxy/internal/db/sqlc"
@@ -41,6 +42,7 @@ func main() {
 	defer dbPool.Close()
 
 	queries := sqlc.New(dbPool)
+	authService := auth.NewService(queries, config.JWT)
 
 	tlsConfig := &grpcserver.TLSConfig{
 		Enabled:    config.Grpc.TLS.Enabled,
@@ -91,8 +93,7 @@ func main() {
 	services := &internalhttp.Services{
 		GrpcServer:  grpcSrv,
 		CertService: certService,
-		Queries:     queries,
-		JWTConfig:   config.JWT,
+		AuthService: authService,
 	}
 
 	gin.SetMode(gin.ReleaseMode)

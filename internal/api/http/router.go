@@ -5,7 +5,6 @@ import (
 	"github.com/EternisAI/silo-proxy/internal/api/http/middleware"
 	"github.com/EternisAI/silo-proxy/internal/auth"
 	"github.com/EternisAI/silo-proxy/internal/cert"
-	"github.com/EternisAI/silo-proxy/internal/db/sqlc"
 	grpcserver "github.com/EternisAI/silo-proxy/internal/grpc/server"
 	"github.com/gin-gonic/gin"
 )
@@ -13,8 +12,7 @@ import (
 type Services struct {
 	GrpcServer  *grpcserver.Server
 	CertService *cert.Service
-	Queries     *sqlc.Queries
-	JWTConfig   auth.Config
+	AuthService *auth.Service
 }
 
 func SetupRoute(engine *gin.Engine, srvs *Services, adminAPIKey string) {
@@ -23,7 +21,7 @@ func SetupRoute(engine *gin.Engine, srvs *Services, adminAPIKey string) {
 	healthHandler := handler.NewHealthHandler()
 	engine.GET("/health", healthHandler.Check)
 
-	authHandler := handler.NewAuthHandler(srvs.Queries, srvs.JWTConfig)
+	authHandler := handler.NewAuthHandler(srvs.AuthService)
 	authRoutes := engine.Group("/auth")
 	{
 		authRoutes.POST("/register", authHandler.Register)
