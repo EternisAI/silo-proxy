@@ -43,7 +43,7 @@ func (s *Service) Register(ctx context.Context, username, password string) (Regi
 	user, err := s.queries.CreateUser(ctx, sqlc.CreateUserParams{
 		Username:     username,
 		PasswordHash: hash,
-		Role:         sqlc.UserRoleStudent,
+		Role:         sqlc.UserRoleUser,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
