@@ -24,7 +24,7 @@ func TestRegister(t *testing.T, router *gin.Engine, jwtSecret string) {
 		var resp dto.RegisterResponse
 		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
 		assert.Equal(t, "testuser", resp.Username)
-		assert.Equal(t, "Student", resp.Role)
+		assert.Equal(t, "User", resp.Role)
 		assert.NotEmpty(t, resp.ID)
 	})
 
@@ -69,7 +69,7 @@ func TestLogin(t *testing.T, router *gin.Engine, jwtSecret string) {
 		claims, err := auth.ValidateToken(jwtSecret, resp.Token)
 		require.NoError(t, err)
 		assert.Equal(t, "loginuser", claims.Username)
-		assert.Equal(t, "Student", claims.Role)
+		assert.Equal(t, "User", claims.Role)
 	})
 
 	t.Run("wrong password", func(t *testing.T) {
