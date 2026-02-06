@@ -1,7 +1,7 @@
 log:
   level: debug
 db:
-  url: "postgres://postgres:postgres@localhost:5432/silo?sslmode=disable"
+  url: "postgres://postgres:postgres@localhost:5432/silo-proxy?sslmode=disable"
   schema: "public"
 jwt:
   secret: "change-me-to-a-random-secret"
