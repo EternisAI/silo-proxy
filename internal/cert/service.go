@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net"
 	"os"
-	"path/filepath"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,20 +19,18 @@ type Service struct {
 	CaKeyPath      string
 	ServerCertPath string
 	ServerKeyPath  string
-	AgentCertDir   string
 	DomainNames    []string
 	IPAddresses    []net.IP
 	db             *pgxpool.Pool
 	queries        *sqlc.Queries
 }
 
-func New(caCertPath, caKeyPath, serverCertPath, serverKeyPath, agentCertDir, domainNamesConfig, IPAddressesConfig string, db *pgxpool.Pool) (*Service, error) {
+func New(caCertPath, caKeyPath, serverCertPath, serverKeyPath, domainNamesConfig, IPAddressesConfig string, db *pgxpool.Pool) (*Service, error) {
 	s := &Service{
 		CaCertPath:     caCertPath,
 		CaKeyPath:      caKeyPath,
 		ServerCertPath: serverCertPath,
 		ServerKeyPath:  serverKeyPath,
-		AgentCertDir:   agentCertDir,
 		db:             db,
 		queries:        sqlc.New(db),
 	}
@@ -166,79 +163,6 @@ func (s *Service) GetCACert() ([]byte, error) {
 	return certBytes, nil
 }
 
-func (s *Service) GetAgentCertDir(agentID string) string {
-	return filepath.Join(s.AgentCertDir, agentID)
-}
-
-func (s *Service) GetAgentCertPath(agentID string) string {
-	return filepath.Join(s.GetAgentCertDir(agentID), fmt.Sprintf("%s-cert.pem", agentID))
-}
-
-func (s *Service) GetAgentKeyPath(agentID string) string {
-	return filepath.Join(s.GetAgentCertDir(agentID), fmt.Sprintf("%s-key.pem", agentID))
-}
-
-func (s *Service) AgentCertExists(agentID string) bool {
-	certPath := s.GetAgentCertPath(agentID)
-	keyPath := s.GetAgentKeyPath(agentID)
-	return fileExists(certPath) && fileExists(keyPath)
-}
-
-func (s *Service) GetAgentCert(agentID string) (certBytes, keyBytes []byte, err error) {
-	certPath := s.GetAgentCertPath(agentID)
-	keyPath := s.GetAgentKeyPath(agentID)
-
-	certBytes, err = os.ReadFile(certPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read agent certificate: %w", err)
-	}
-
-	keyBytes, err = os.ReadFile(keyPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read agent key: %w", err)
-	}
-
-	return certBytes, keyBytes, nil
-}
-
-func (s *Service) DeleteAgentCert(agentID string) error {
-	certDir := s.GetAgentCertDir(agentID)
-
-	if !fileExists(certDir) {
-		return fmt.Errorf("agent certificate directory does not exist")
-	}
-
-	if err := os.RemoveAll(certDir); err != nil {
-		return fmt.Errorf("failed to delete agent certificate directory: %w", err)
-	}
-
-	slog.Info("Deleted agent certificate", "agent_id", agentID, "path", certDir)
-	return nil
-}
-
-func (s *Service) ListAgentCerts() ([]string, error) {
-	if !fileExists(s.AgentCertDir) {
-		return []string{}, nil
-	}
-
-	entries, err := os.ReadDir(s.AgentCertDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read agent cert directory: %w", err)
-	}
-
-	var agentIDs []string
-	for _, entry := range entries {
-		if entry.IsDir() {
-			agentID := entry.Name()
-			if s.AgentCertExists(agentID) {
-				agentIDs = append(agentIDs, agentID)
-			}
-		}
-	}
-
-	return agentIDs, nil
-}
-
 func (s *Service) GenerateAgentCertWithDB(ctx context.Context, agentID string, userID pgtype.UUID) (*x509.Certificate, *rsa.PrivateKey, error) {
 	if err := ValidateAgentID(agentID); err != nil {
 		return nil, nil, fmt.Errorf("invalid agent ID: %w", err)
@@ -249,7 +173,12 @@ func (s *Service) GenerateAgentCertWithDB(ctx context.Context, agentID string, u
 		return nil, nil, fmt.Errorf("certificate already exists for agent %s", existingCert.AgentID)
 	}
 
-	agentCert, agentKey, err := s.GenerateAgentCert(agentID)
+	caCert, caKey, err := loadCA(s.CaCertPath, s.CaKeyPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to load CA: %w", err)
+	}
+
+	agentCert, agentKey, err := generateAgentCertificate(agentID, caCert, caKey)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to generate certificate: %w", err)
 	}
@@ -283,13 +212,10 @@ func (s *Service) GenerateAgentCertWithDB(ctx context.Context, agentID string, u
 		KeyPem:  string(keyPEM),
 	})
 	if err != nil {
-		if deleteErr := s.DeleteAgentCert(agentID); deleteErr != nil {
-			slog.Error("Failed to cleanup agent certificate after DB insert failure", "error", deleteErr, "agent_id", agentID)
-		}
 		return nil, nil, fmt.Errorf("failed to store certificate in database: %w", err)
 	}
 
-	slog.Info("Generated and stored agent certificate", "agent_id", agentID, "user_id", userID)
+	slog.Info("Generated and stored agent certificate in database", "agent_id", agentID, "user_id", userID)
 	return agentCert, agentKey, nil
 }
 
@@ -316,11 +242,7 @@ func (s *Service) DeleteAgentCertFromDB(ctx context.Context, agentID string, use
 		return fmt.Errorf("failed to delete certificate from database: %w", err)
 	}
 
-	if err := s.DeleteAgentCert(agentID); err != nil {
-		slog.Warn("Failed to delete certificate files from filesystem", "error", err, "agent_id", agentID)
-	}
-
-	slog.Info("Deleted agent certificate", "agent_id", agentID, "user_id", userID)
+	slog.Info("Deleted agent certificate from database", "agent_id", agentID, "user_id", userID)
 	return nil
 }
 
