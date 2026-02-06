@@ -60,6 +60,5 @@ func TestSystemIntegration(t *testing.T) {
 	t.Run("HealthCheck", func(t *testing.T) { tests.TestHealthCheck(t, engine) })
 	t.Run("Register", func(t *testing.T) { tests.TestRegister(t, engine, jwtSecret) })
 	t.Run("Login", func(t *testing.T) { tests.TestLogin(t, engine, jwtSecret) })
-	t.Run("DeleteUser", func(t *testing.T) { tests.TestDeleteUser(t, engine, jwtSecret) })
-	t.Run("ListUsers", func(t *testing.T) { tests.TestListUsers(t, engine, jwtSecret) })
+	t.Run("UserCRUD", func(t *testing.T) { tests.TestUserCRUD(t, engine, jwtSecret) })
 }
