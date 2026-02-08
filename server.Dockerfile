@@ -22,7 +22,7 @@ FROM alpine
 ARG APP=silo-proxy-server
 
 WORKDIR /go/bin
-COPY cmd/${APP}/application.yml /go/bin/application.yml
+COPY cmd/${APP}/application.yaml /go/bin/application.yaml
 COPY --from=build-env /build/app .
 RUN chmod +x app
 
