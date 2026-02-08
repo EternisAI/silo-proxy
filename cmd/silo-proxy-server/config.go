@@ -9,15 +9,15 @@ import (
 	"github.com/EternisAI/silo-proxy/internal/auth"
 	"github.com/EternisAI/silo-proxy/internal/db"
 	"github.com/joho/godotenv"
-	"github.com/spf13/viper"
+	"github.com/lwlee2608/adder"
 )
 
 type Config struct {
 	Log  LogConfig
 	Http http.Config
 	Grpc GrpcConfig
-	DB   db.Config    `mapstructure:"db"`
-	JWT  auth.Config  `mapstructure:"jwt"`
+	DB   db.Config   `mapstructure:"db"`
+	JWT  auth.Config `mapstructure:"jwt"`
 }
 
 type GrpcConfig struct {
@@ -44,21 +44,21 @@ func InitConfig() {
 
 	_ = godotenv.Load()
 
-	viper.SetConfigName("application")
-	viper.AddConfigPath(".")
-	viper.AddConfigPath("./cmd/silo-proxy-server")
-	viper.SetConfigType("yaml")
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	viper.AutomaticEnv()
+	adder.SetConfigName("application")
+	adder.AddConfigPath(".")
+	adder.AddConfigPath("./cmd/silo-proxy-server")
+	adder.SetConfigType("yaml")
+	adder.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	adder.AutomaticEnv()
 
-	_ = viper.BindEnv("telegram.token", "TELEGRAM_TOKEN")
-	_ = viper.BindEnv("openrouter.apiKey", "OPENROUTER_API_KEY")
+	_ = adder.BindEnv("telegram.token", "TELEGRAM_TOKEN")
+	_ = adder.BindEnv("openrouter.apiKey", "OPENROUTER_API_KEY")
 
-	if err := viper.ReadInConfig(); err != nil {
+	if err := adder.ReadInConfig(); err != nil {
 		panic(err)
 	}
 
-	err = viper.Unmarshal(&config)
+	err = adder.Unmarshal(&config)
 	if err != nil {
 		panic(err)
 	}
