@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -25,6 +26,7 @@ type AgentServerInfo struct {
 	AgentID   string
 	Port      int
 	Server    *http.Server
+	Listener  net.Listener
 	StartedAt time.Time
 }
 
@@ -95,31 +97,41 @@ func (asm *AgentServerManager) StartAgentServer(agentID string) (int, error) {
 			Handler: engine,
 		}
 
-		// Start server in goroutine with the listener we already bound
-		go func(s *http.Server, l net.Listener, p int, aid string) {
-			slog.Info("Starting agent HTTP server",
-				"agent_id", aid,
-				"port", p)
+		info := &AgentServerInfo{
+			AgentID:   agentID,
+			Port:      allocatedPort,
+			Server:    srv,
+			Listener:  listener,
+			StartedAt: time.Now(),
+		}
 
-			if err := s.Serve(l); err != nil && err != http.ErrServerClosed {
+		asm.servers[agentID] = info
+
+		// Start server in goroutine with the listener we already bound
+		go func(serverInfo *AgentServerInfo) {
+			slog.Info("Starting agent HTTP server",
+				"agent_id", serverInfo.AgentID,
+				"port", serverInfo.Port)
+
+			if err := serverInfo.Server.Serve(serverInfo.Listener); err != nil && err != http.ErrServerClosed {
 				slog.Error("Agent HTTP server failed",
-					"agent_id", aid,
-					"port", p,
+					"agent_id", serverInfo.AgentID,
+					"port", serverInfo.Port,
 					"error", err)
 
 				// Cleanup resources on unexpected failure
-				_ = l.Close()
+				_ = serverInfo.Listener.Close()
 				asm.mu.Lock()
-				if info, ok := asm.servers[aid]; ok && info.Port == p {
-					delete(asm.servers, aid)
-					asm.portManager.Release(p)
+				if info, ok := asm.servers[serverInfo.AgentID]; ok && info == serverInfo {
+					delete(asm.servers, serverInfo.AgentID)
+					asm.portManager.Release(serverInfo.Port)
 					slog.Info("Cleaned up failed agent server",
-						"agent_id", aid,
-						"port", p)
+						"agent_id", serverInfo.AgentID,
+						"port", serverInfo.Port)
 				}
 				asm.mu.Unlock()
 			}
-		}(srv, listener, allocatedPort, agentID)
+		}(info)
 
 		port = allocatedPort
 		lastErr = nil
@@ -129,15 +141,6 @@ func (asm *AgentServerManager) StartAgentServer(agentID string) (int, error) {
 	if lastErr != nil {
 		return 0, fmt.Errorf("failed to start server after %d attempts: %w", maxPortBindRetries, lastErr)
 	}
-
-	// Store server info
-	info := &AgentServerInfo{
-		AgentID:   agentID,
-		Port:      port,
-		Server:    srv,
-		StartedAt: time.Now(),
-	}
-	asm.servers[agentID] = info
 
 	slog.Info("Agent HTTP server started successfully",
 		"agent_id", agentID,
@@ -178,6 +181,15 @@ func (asm *AgentServerManager) StopAgentServer(agentID string) error {
 		info.Server.Close()
 	}
 
+	if info.Listener != nil {
+		if err := info.Listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+			slog.Warn("Failed to close agent listener",
+				"agent_id", agentID,
+				"port", info.Port,
+				"error", err)
+		}
+	}
+
 	// Always release port back to pool
 	asm.portManager.Release(info.Port)
 
@@ -202,6 +214,7 @@ func (asm *AgentServerManager) GetAllServers() []*AgentServerInfo {
 			AgentID:   info.AgentID,
 			Port:      info.Port,
 			Server:    info.Server,
+			Listener:  info.Listener,
 			StartedAt: info.StartedAt,
 		}
 		servers = append(servers, serverCopy)

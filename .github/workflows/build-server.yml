@@ -12,8 +12,41 @@ on:
   workflow_dispatch:
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Run tests
+        run: make test
+
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Build binaries
+        run: make build
+
   build-server:
     if: github.event_name != 'pull_request'
+    needs:
+      - test
+      - build
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -71,6 +104,9 @@ jobs:
 
   build-agent:
     if: github.event_name != 'pull_request'
+    needs:
+      - test
+      - build
     runs-on: ubuntu-latest
     permissions:
       contents: read
