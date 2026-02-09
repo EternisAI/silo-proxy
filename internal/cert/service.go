@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 type Service struct {
@@ -18,6 +19,7 @@ type Service struct {
 	AgentCertDir   string
 	DomainNames    []string
 	IPAddresses    []net.IP
+	agentCertMu    sync.Mutex
 }
 
 func New(caCertPath, caKeyPath, serverCertPath, serverKeyPath, agentCertDir, domainNamesConfig, IPAddressesConfig string) (*Service, error) {

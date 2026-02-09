@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -15,9 +16,10 @@ import (
 
 func runProvision(args []string) error {
 	fs := flag.NewFlagSet("provision", flag.ExitOnError)
-	server := fs.String("server", "", "Server URL (e.g., http://server:8080)")
+	server := fs.String("server", "", "Server URL (e.g., https://server:8080)")
 	key := fs.String("key", "", "Provision key")
 	certDir := fs.String("cert-dir", "./certs", "Directory to save certificates")
+	insecure := fs.Bool("insecure", false, "Skip TLS certificate verification (for development only)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -29,13 +31,25 @@ func runProvision(args []string) error {
 		return fmt.Errorf("--key is required")
 	}
 
+	if *insecure {
+		fmt.Fprintln(os.Stderr, "WARNING: Using insecure TLS mode. This is unsafe for production.")
+	}
+
 	reqBody, err := json.Marshal(dto.ProvisionRequest{Key: *key})
 	if err != nil {
 		return fmt.Errorf("failed to marshal request: %w", err)
 	}
 
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: *insecure,
+			},
+		},
+	}
+
 	url := *server + "/api/v1/provision"
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(reqBody))
+	resp, err := client.Post(url, "application/json", bytes.NewBuffer(reqBody))
 	if err != nil {
 		return fmt.Errorf("failed to connect to server: %w", err)
 	}
@@ -58,7 +72,7 @@ func runProvision(args []string) error {
 	agentCertDir := filepath.Join(*certDir, "agents", provResp.AgentID)
 	caCertDir := filepath.Join(*certDir, "ca")
 
-	if err := os.MkdirAll(agentCertDir, 0755); err != nil {
+	if err := os.MkdirAll(agentCertDir, 0700); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", agentCertDir, err)
 	}
 	if err := os.MkdirAll(caCertDir, 0755); err != nil {

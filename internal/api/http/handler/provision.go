@@ -101,16 +101,16 @@ func (h *ProvisionHandler) Provision(ctx *gin.Context) {
 
 	agentID := pk.AgentID
 
-	if h.certService.AgentCertExists(agentID) {
-		slog.Warn("Certificate already exists for agent", "agent_id", agentID)
-		ctx.JSON(http.StatusConflict, gin.H{"error": "Certificate already exists for this agent"})
-		return
-	}
-
-	agentCert, agentKey, err := h.certService.GenerateAgentCert(agentID)
+	agentCert, agentKey, created, err := h.certService.GenerateAgentCertIfNotExists(agentID)
 	if err != nil {
 		slog.Error("Failed to generate agent certificate", "error", err, "agent_id", agentID)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate agent certificate"})
+		return
+	}
+
+	if !created {
+		slog.Warn("Certificate already exists for agent", "agent_id", agentID)
+		ctx.JSON(http.StatusConflict, gin.H{"error": "Certificate already exists for this agent"})
 		return
 	}
 
