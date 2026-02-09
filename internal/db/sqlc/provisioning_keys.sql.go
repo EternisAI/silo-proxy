@@ -84,19 +84,34 @@ func (q *Queries) GetProvisioningKeyByHash(ctx context.Context, keyHash string) 
 	return i, err
 }
 
-const incrementKeyUsage = `-- name: IncrementKeyUsage :exec
+const incrementKeyUsage = `-- name: IncrementKeyUsage :one
 UPDATE provisioning_keys
 SET used_count = used_count + 1,
     status = CASE WHEN used_count + 1 >= max_uses
                   THEN 'exhausted'::provisioning_key_status
                   ELSE status END,
     updated_at = NOW()
-WHERE id = $1
+WHERE id = $1 AND used_count < max_uses AND status = 'active'
+RETURNING id, key_hash, user_id, status, max_uses, used_count, expires_at, created_at, updated_at, revoked_at, notes
 `
 
-func (q *Queries) IncrementKeyUsage(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, incrementKeyUsage, id)
-	return err
+func (q *Queries) IncrementKeyUsage(ctx context.Context, id pgtype.UUID) (ProvisioningKey, error) {
+	row := q.db.QueryRow(ctx, incrementKeyUsage, id)
+	var i ProvisioningKey
+	err := row.Scan(
+		&i.ID,
+		&i.KeyHash,
+		&i.UserID,
+		&i.Status,
+		&i.MaxUses,
+		&i.UsedCount,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.RevokedAt,
+		&i.Notes,
+	)
+	return i, err
 }
 
 const listProvisioningKeysByUser = `-- name: ListProvisioningKeysByUser :many

@@ -70,18 +70,6 @@ func main() {
 	provisioningService := provisioning.NewService(queries, certService)
 	agentService := agents.NewService(queries)
 
-	// Get or create default user for legacy agent migration
-	defaultUser, err := queries.GetUserByUsername(context.Background(), "admin")
-	if err != nil {
-		slog.Warn("Default user 'admin' not found, legacy agent migration may fail")
-	}
-	defaultUserID := ""
-	if defaultUser.ID.Valid {
-		defaultUserID = fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
-			defaultUser.ID.Bytes[0:4], defaultUser.ID.Bytes[4:6], defaultUser.ID.Bytes[6:8],
-			defaultUser.ID.Bytes[8:10], defaultUser.ID.Bytes[10:16])
-	}
-
 	tlsConfig := &grpcserver.TLSConfig{
 		Enabled:    config.Grpc.TLS.Enabled,
 		CertFile:   config.Grpc.TLS.CertFile,
@@ -91,7 +79,7 @@ func main() {
 	}
 
 	grpcSrv := grpcserver.NewServer(config.Grpc.Port, tlsConfig)
-	grpcSrv.SetServices(provisioningService, agentService, defaultUserID)
+	grpcSrv.SetServices(provisioningService, agentService)
 
 	portManager, err := internalhttp.NewPortManager(
 		config.Http.AgentPortRange.Start,

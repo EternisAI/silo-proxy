@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -19,7 +18,6 @@ type StreamHandler struct {
 	server              *Server
 	provisioningService *provisioning.Service
 	agentService        *agents.Service
-	defaultUserID       string // Default user for legacy agent migration
 }
 
 func NewStreamHandler(
@@ -27,14 +25,12 @@ func NewStreamHandler(
 	server *Server,
 	provisioningService *provisioning.Service,
 	agentService *agents.Service,
-	defaultUserID string,
 ) *StreamHandler {
 	return &StreamHandler{
 		connManager:         connManager,
 		server:              server,
 		provisioningService: provisioningService,
 		agentService:        agentService,
-		defaultUserID:       defaultUserID,
 	}
 }
 
@@ -75,33 +71,14 @@ func (sh *StreamHandler) HandleStream(stream proto.ProxyService_StreamServer) er
 		// Established agent: validate against DB
 		agent, err := sh.agentService.GetAgentByID(ctx, agentID)
 		if err != nil {
-			if errors.Is(err, agents.ErrAgentNotFound) {
-				// Legacy agent auto-migration
-				slog.Warn("Legacy agent detected, auto-migrating", "agent_id", agentID)
+			return fmt.Errorf("failed to get agent: %w", err)
+		}
 
-				agent, err = sh.agentService.CreateLegacyAgent(ctx, agentID, sh.defaultUserID)
-				if err != nil {
-					return fmt.Errorf("failed to create legacy agent: %w", err)
-				}
-
-				slog.Info("Legacy agent auto-migrated",
-					"agent_id", agent.ID,
-					"legacy_id", agentID,
-					"user_id", sh.defaultUserID)
-
-				// Use the new agent ID
-				agentID = agent.ID
-			} else {
-				return fmt.Errorf("failed to get agent: %w", err)
-			}
-		} else {
-			// Validate agent status
-			if agent.Status != "active" {
-				slog.Warn("Agent connection rejected, status not active",
-					"agent_id", agentID,
-					"status", agent.Status)
-				return fmt.Errorf("agent suspended or inactive")
-			}
+		if agent.Status != "active" {
+			slog.Warn("Agent connection rejected, status not active",
+				"agent_id", agentID,
+				"status", agent.Status)
+			return fmt.Errorf("agent suspended or inactive")
 		}
 
 		slog.Info("Agent authenticated", "agent_id", agentID, "remote_ip", remoteIP)

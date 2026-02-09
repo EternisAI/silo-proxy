@@ -113,7 +113,7 @@ func (s *Service) ProvisionAgent(ctx context.Context, key string, remoteIP strin
 	// Hash the provided key
 	keyHash := HashKey(key)
 
-	// Lookup key in database
+	// Lookup key in database (only returns active keys)
 	dbKey, err := s.queries.GetProvisioningKeyByHash(ctx, keyHash)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -121,23 +121,6 @@ func (s *Service) ProvisionAgent(ctx context.Context, key string, remoteIP strin
 			return nil, ErrKeyNotFound
 		}
 		return nil, fmt.Errorf("failed to lookup key: %w", err)
-	}
-
-	// Validate key status
-	if dbKey.Status != sqlc.ProvisioningKeyStatusActive {
-		slog.Warn("Provisioning attempt with non-active key",
-			"key_id", uuidToString(dbKey.ID.Bytes),
-			"status", dbKey.Status,
-			"remote_ip", remoteIP)
-
-		switch dbKey.Status {
-		case sqlc.ProvisioningKeyStatusExpired:
-			return nil, ErrKeyExpired
-		case sqlc.ProvisioningKeyStatusExhausted:
-			return nil, ErrKeyExhausted
-		default:
-			return nil, ErrKeyInvalid
-		}
 	}
 
 	// Validate expiration
@@ -149,41 +132,34 @@ func (s *Service) ProvisionAgent(ctx context.Context, key string, remoteIP strin
 		return nil, ErrKeyExpired
 	}
 
-	// Validate usage count
-	if dbKey.UsedCount >= dbKey.MaxUses {
-		slog.Warn("Provisioning attempt with exhausted key",
-			"key_id", uuidToString(dbKey.ID.Bytes),
-			"used_count", dbKey.UsedCount,
-			"max_uses", dbKey.MaxUses,
-			"remote_ip", remoteIP)
-		return nil, ErrKeyExhausted
+	// Atomically increment key usage count.
+	// The WHERE clause (used_count < max_uses AND status = 'active') ensures
+	// concurrent requests cannot exceed max_uses — only one will succeed.
+	_, err = s.queries.IncrementKeyUsage(ctx, dbKey.ID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			slog.Warn("Provisioning attempt with exhausted key",
+				"key_id", uuidToString(dbKey.ID.Bytes),
+				"remote_ip", remoteIP)
+			return nil, ErrKeyExhausted
+		}
+		return nil, fmt.Errorf("failed to increment key usage: %w", err)
 	}
 
 	// Create agent in database (ID is auto-generated)
 	dbAgent, err := s.queries.CreateAgent(ctx, sqlc.CreateAgentParams{
 		UserID:               dbKey.UserID,
 		ProvisionedWithKeyID: pgtype.UUID{Bytes: dbKey.ID.Bytes, Valid: true},
-		Metadata:             []byte("{}"), // Empty JSON object
+		Metadata:             []byte("{}"),
 		Notes:                pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent: %w", err)
 	}
 
-	// Increment key usage count
-	if err := s.queries.IncrementKeyUsage(ctx, dbKey.ID); err != nil {
-		slog.Error("Failed to increment key usage count",
-			"key_id", uuidToString(dbKey.ID.Bytes),
-			"error", err)
-		// Don't fail the provisioning, but log the error
-	}
-
 	result := &AgentProvisionResult{
 		AgentID: uuidToString(dbAgent.ID.Bytes),
 	}
-
-	// TODO: Generate TLS certificate if cert service is available
-	// This will be implemented in a future phase when GenerateAgentCertificate method is added
 
 	slog.Info("Agent provisioned successfully",
 		"agent_id", result.AgentID,

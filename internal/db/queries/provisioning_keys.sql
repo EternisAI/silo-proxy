@@ -9,14 +9,15 @@ WHERE key_hash = $1 AND status = 'active' LIMIT 1;
 -- name: ListProvisioningKeysByUser :many
 SELECT * FROM provisioning_keys WHERE user_id = $1 ORDER BY created_at DESC;
 
--- name: IncrementKeyUsage :exec
+-- name: IncrementKeyUsage :one
 UPDATE provisioning_keys
 SET used_count = used_count + 1,
     status = CASE WHEN used_count + 1 >= max_uses
                   THEN 'exhausted'::provisioning_key_status
                   ELSE status END,
     updated_at = NOW()
-WHERE id = $1;
+WHERE id = $1 AND used_count < max_uses AND status = 'active'
+RETURNING *;
 
 -- name: RevokeProvisioningKey :exec
 UPDATE provisioning_keys

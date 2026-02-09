@@ -180,10 +180,10 @@ func (s *Server) SetAgentServerManager(asm AgentServerManager) {
 }
 
 // SetServices initializes the stream handler with provisioning and agent services
-func (s *Server) SetServices(provisioningService *provisioning.Service, agentService *agents.Service, defaultUserID string) {
+func (s *Server) SetServices(provisioningService *provisioning.Service, agentService *agents.Service) {
 	// Update connection manager with agent service for DB persistence
 	s.connManager.agentService = agentService
 
 	// Initialize stream handler with all services
-	s.streamHandler = NewStreamHandler(s.connManager, s, provisioningService, agentService, defaultUserID)
+	s.streamHandler = NewStreamHandler(s.connManager, s, provisioningService, agentService)
 }

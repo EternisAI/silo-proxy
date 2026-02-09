@@ -30,59 +30,6 @@ func NewService(queries *sqlc.Queries) *Service {
 	}
 }
 
-// CreateLegacyAgent creates an agent for legacy migration (no provisioning key)
-func (s *Service) CreateLegacyAgent(ctx context.Context, legacyID string, userID string) (*Agent, error) {
-	parsedUserID, err := uuid.Parse(userID)
-	if err != nil {
-		return nil, fmt.Errorf("invalid user ID: %w", err)
-	}
-
-	// Parse legacy ID as UUID - if it's not a valid UUID, generate a new one
-	var agentUUID uuid.UUID
-	parsedAgentID, err := uuid.Parse(legacyID)
-	if err != nil {
-		// Not a valid UUID, generate a new one
-		agentUUID = uuid.New()
-		slog.Info("Legacy agent ID is not a UUID, generating new ID",
-			"legacy_id", legacyID,
-			"new_agent_id", agentUUID.String())
-	} else {
-		agentUUID = parsedAgentID
-	}
-
-	metadata := map[string]interface{}{
-		"legacy": true,
-		"original_id": legacyID,
-		"migrated_at": time.Now().Format(time.RFC3339),
-	}
-	metadataJSON, _ := json.Marshal(metadata)
-
-	dbAgent, err := s.queries.CreateAgent(ctx, sqlc.CreateAgentParams{
-		UserID:               pgtype.UUID{Bytes: parsedUserID, Valid: true},
-		ProvisionedWithKeyID: pgtype.UUID{Valid: false}, // NULL for legacy agents
-		Metadata:             metadataJSON,
-		Notes:                pgtype.Text{String: "Auto-migrated legacy agent", Valid: true},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create legacy agent: %w", err)
-	}
-
-	result := &Agent{
-		ID:          uuidToString(dbAgent.ID.Bytes),
-		UserID:      uuidToString(dbAgent.UserID.Bytes),
-		Status:      string(dbAgent.Status),
-		RegisteredAt: dbAgent.RegisteredAt.Time,
-		LastSeenAt:  dbAgent.LastSeenAt.Time,
-	}
-
-	slog.Info("Legacy agent auto-migrated",
-		"legacy_id", legacyID,
-		"agent_id", result.ID,
-		"user_id", userID)
-
-	return result, nil
-}
-
 // GetAgentByID retrieves an agent by ID
 func (s *Service) GetAgentByID(ctx context.Context, agentID string) (*Agent, error) {
 	parsedID, err := uuid.Parse(agentID)

@@ -23,7 +23,7 @@ type Querier interface {
 	GetProvisioningKeyByHash(ctx context.Context, keyHash string) (ProvisioningKey, error)
 	GetUser(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
-	IncrementKeyUsage(ctx context.Context, id pgtype.UUID) error
+	IncrementKeyUsage(ctx context.Context, id pgtype.UUID) (ProvisioningKey, error)
 	ListAgentsByUser(ctx context.Context, userID pgtype.UUID) ([]Agent, error)
 	ListProvisioningKeysByUser(ctx context.Context, userID pgtype.UUID) ([]ProvisioningKey, error)
 	ListUsersPaginated(ctx context.Context, arg ListUsersPaginatedParams) ([]User, error)
