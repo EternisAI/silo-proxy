@@ -66,7 +66,11 @@ type AgentCertificate struct {
 	IsActive          bool             `json:"is_active"`
 	RevokedAt         pgtype.Timestamp `json:"revoked_at"`
 	RevokedReason     pgtype.Text      `json:"revoked_reason"`
-	CreatedAt         pgtype.Timestamp `json:"created_at"`
+	// Unique key for downloading certificate without admin API key. No expiration. Regenerating invalidates previous key.
+	SyncKey pgtype.UUID `json:"sync_key"`
+	// Timestamp when the sync_key was last generated
+	SyncKeyGeneratedAt pgtype.Timestamp `json:"sync_key_generated_at"`
+	CreatedAt          pgtype.Timestamp `json:"created_at"`
 }
 
 type User struct {

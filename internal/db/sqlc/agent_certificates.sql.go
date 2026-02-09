@@ -53,21 +53,25 @@ INSERT INTO agent_certificates (
     not_before,
     not_after,
     cert_pem,
-    key_pem
+    key_pem,
+    sync_key,
+    sync_key_generated_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8
-) RETURNING id, user_id, agent_id, serial_number, subject_common_name, not_before, not_after, cert_pem, key_pem, is_active, revoked_at, revoked_reason, created_at
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+) RETURNING id, user_id, agent_id, serial_number, subject_common_name, not_before, not_after, cert_pem, key_pem, is_active, revoked_at, revoked_reason, sync_key, sync_key_generated_at, created_at
 `
 
 type CreateAgentCertificateParams struct {
-	UserID            pgtype.UUID      `json:"user_id"`
-	AgentID           string           `json:"agent_id"`
-	SerialNumber      string           `json:"serial_number"`
-	SubjectCommonName string           `json:"subject_common_name"`
-	NotBefore         pgtype.Timestamp `json:"not_before"`
-	NotAfter          pgtype.Timestamp `json:"not_after"`
-	CertPem           string           `json:"cert_pem"`
-	KeyPem            string           `json:"key_pem"`
+	UserID             pgtype.UUID      `json:"user_id"`
+	AgentID            string           `json:"agent_id"`
+	SerialNumber       string           `json:"serial_number"`
+	SubjectCommonName  string           `json:"subject_common_name"`
+	NotBefore          pgtype.Timestamp `json:"not_before"`
+	NotAfter           pgtype.Timestamp `json:"not_after"`
+	CertPem            string           `json:"cert_pem"`
+	KeyPem             string           `json:"key_pem"`
+	SyncKey            pgtype.UUID      `json:"sync_key"`
+	SyncKeyGeneratedAt pgtype.Timestamp `json:"sync_key_generated_at"`
 }
 
 func (q *Queries) CreateAgentCertificate(ctx context.Context, arg CreateAgentCertificateParams) (AgentCertificate, error) {
@@ -80,6 +84,8 @@ func (q *Queries) CreateAgentCertificate(ctx context.Context, arg CreateAgentCer
 		arg.NotAfter,
 		arg.CertPem,
 		arg.KeyPem,
+		arg.SyncKey,
+		arg.SyncKeyGeneratedAt,
 	)
 	var i AgentCertificate
 	err := row.Scan(
@@ -95,6 +101,8 @@ func (q *Queries) CreateAgentCertificate(ctx context.Context, arg CreateAgentCer
 		&i.IsActive,
 		&i.RevokedAt,
 		&i.RevokedReason,
+		&i.SyncKey,
+		&i.SyncKeyGeneratedAt,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -111,7 +119,7 @@ func (q *Queries) DeleteCertificate(ctx context.Context, agentID string) error {
 }
 
 const getCertificateByAgentID = `-- name: GetCertificateByAgentID :one
-SELECT id, user_id, agent_id, serial_number, subject_common_name, not_before, not_after, cert_pem, key_pem, is_active, revoked_at, revoked_reason, created_at FROM agent_certificates
+SELECT id, user_id, agent_id, serial_number, subject_common_name, not_before, not_after, cert_pem, key_pem, is_active, revoked_at, revoked_reason, sync_key, sync_key_generated_at, created_at FROM agent_certificates
 WHERE agent_id = $1
 LIMIT 1
 `
@@ -132,13 +140,15 @@ func (q *Queries) GetCertificateByAgentID(ctx context.Context, agentID string) (
 		&i.IsActive,
 		&i.RevokedAt,
 		&i.RevokedReason,
+		&i.SyncKey,
+		&i.SyncKeyGeneratedAt,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getCertificateByID = `-- name: GetCertificateByID :one
-SELECT id, user_id, agent_id, serial_number, subject_common_name, not_before, not_after, cert_pem, key_pem, is_active, revoked_at, revoked_reason, created_at FROM agent_certificates
+SELECT id, user_id, agent_id, serial_number, subject_common_name, not_before, not_after, cert_pem, key_pem, is_active, revoked_at, revoked_reason, sync_key, sync_key_generated_at, created_at FROM agent_certificates
 WHERE id = $1
 LIMIT 1
 `
@@ -159,13 +169,15 @@ func (q *Queries) GetCertificateByID(ctx context.Context, id pgtype.UUID) (Agent
 		&i.IsActive,
 		&i.RevokedAt,
 		&i.RevokedReason,
+		&i.SyncKey,
+		&i.SyncKeyGeneratedAt,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getCertificateBySerial = `-- name: GetCertificateBySerial :one
-SELECT id, user_id, agent_id, serial_number, subject_common_name, not_before, not_after, cert_pem, key_pem, is_active, revoked_at, revoked_reason, created_at FROM agent_certificates
+SELECT id, user_id, agent_id, serial_number, subject_common_name, not_before, not_after, cert_pem, key_pem, is_active, revoked_at, revoked_reason, sync_key, sync_key_generated_at, created_at FROM agent_certificates
 WHERE serial_number = $1
 LIMIT 1
 `
@@ -186,13 +198,44 @@ func (q *Queries) GetCertificateBySerial(ctx context.Context, serialNumber strin
 		&i.IsActive,
 		&i.RevokedAt,
 		&i.RevokedReason,
+		&i.SyncKey,
+		&i.SyncKeyGeneratedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getCertificateBySyncKey = `-- name: GetCertificateBySyncKey :one
+SELECT id, user_id, agent_id, serial_number, subject_common_name, not_before, not_after, cert_pem, key_pem, is_active, revoked_at, revoked_reason, sync_key, sync_key_generated_at, created_at FROM agent_certificates
+WHERE sync_key = $1
+LIMIT 1
+`
+
+func (q *Queries) GetCertificateBySyncKey(ctx context.Context, syncKey pgtype.UUID) (AgentCertificate, error) {
+	row := q.db.QueryRow(ctx, getCertificateBySyncKey, syncKey)
+	var i AgentCertificate
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.AgentID,
+		&i.SerialNumber,
+		&i.SubjectCommonName,
+		&i.NotBefore,
+		&i.NotAfter,
+		&i.CertPem,
+		&i.KeyPem,
+		&i.IsActive,
+		&i.RevokedAt,
+		&i.RevokedReason,
+		&i.SyncKey,
+		&i.SyncKeyGeneratedAt,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const listAllCertificates = `-- name: ListAllCertificates :many
-SELECT id, user_id, agent_id, serial_number, subject_common_name, not_before, not_after, cert_pem, key_pem, is_active, revoked_at, revoked_reason, created_at FROM agent_certificates
+SELECT id, user_id, agent_id, serial_number, subject_common_name, not_before, not_after, cert_pem, key_pem, is_active, revoked_at, revoked_reason, sync_key, sync_key_generated_at, created_at FROM agent_certificates
 ORDER BY created_at DESC
 `
 
@@ -218,6 +261,8 @@ func (q *Queries) ListAllCertificates(ctx context.Context) ([]AgentCertificate, 
 			&i.IsActive,
 			&i.RevokedAt,
 			&i.RevokedReason,
+			&i.SyncKey,
+			&i.SyncKeyGeneratedAt,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -231,7 +276,7 @@ func (q *Queries) ListAllCertificates(ctx context.Context) ([]AgentCertificate, 
 }
 
 const listCertificatesByUser = `-- name: ListCertificatesByUser :many
-SELECT id, user_id, agent_id, serial_number, subject_common_name, not_before, not_after, cert_pem, key_pem, is_active, revoked_at, revoked_reason, created_at FROM agent_certificates
+SELECT id, user_id, agent_id, serial_number, subject_common_name, not_before, not_after, cert_pem, key_pem, is_active, revoked_at, revoked_reason, sync_key, sync_key_generated_at, created_at FROM agent_certificates
 WHERE user_id = $1
 ORDER BY created_at DESC
 `
@@ -258,6 +303,8 @@ func (q *Queries) ListCertificatesByUser(ctx context.Context, userID pgtype.UUID
 			&i.IsActive,
 			&i.RevokedAt,
 			&i.RevokedReason,
+			&i.SyncKey,
+			&i.SyncKeyGeneratedAt,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -270,13 +317,49 @@ func (q *Queries) ListCertificatesByUser(ctx context.Context, userID pgtype.UUID
 	return items, nil
 }
 
+const regenerateSyncKey = `-- name: RegenerateSyncKey :one
+UPDATE agent_certificates
+SET sync_key = $2,
+    sync_key_generated_at = NOW()
+WHERE agent_id = $1
+RETURNING id, user_id, agent_id, serial_number, subject_common_name, not_before, not_after, cert_pem, key_pem, is_active, revoked_at, revoked_reason, sync_key, sync_key_generated_at, created_at
+`
+
+type RegenerateSyncKeyParams struct {
+	AgentID string      `json:"agent_id"`
+	SyncKey pgtype.UUID `json:"sync_key"`
+}
+
+func (q *Queries) RegenerateSyncKey(ctx context.Context, arg RegenerateSyncKeyParams) (AgentCertificate, error) {
+	row := q.db.QueryRow(ctx, regenerateSyncKey, arg.AgentID, arg.SyncKey)
+	var i AgentCertificate
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.AgentID,
+		&i.SerialNumber,
+		&i.SubjectCommonName,
+		&i.NotBefore,
+		&i.NotAfter,
+		&i.CertPem,
+		&i.KeyPem,
+		&i.IsActive,
+		&i.RevokedAt,
+		&i.RevokedReason,
+		&i.SyncKey,
+		&i.SyncKeyGeneratedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const revokeCertificate = `-- name: RevokeCertificate :one
 UPDATE agent_certificates
 SET revoked_at = NOW(),
     revoked_reason = $2,
     is_active = false
 WHERE agent_id = $1
-RETURNING id, user_id, agent_id, serial_number, subject_common_name, not_before, not_after, cert_pem, key_pem, is_active, revoked_at, revoked_reason, created_at
+RETURNING id, user_id, agent_id, serial_number, subject_common_name, not_before, not_after, cert_pem, key_pem, is_active, revoked_at, revoked_reason, sync_key, sync_key_generated_at, created_at
 `
 
 type RevokeCertificateParams struct {
@@ -300,6 +383,8 @@ func (q *Queries) RevokeCertificate(ctx context.Context, arg RevokeCertificatePa
 		&i.IsActive,
 		&i.RevokedAt,
 		&i.RevokedReason,
+		&i.SyncKey,
+		&i.SyncKeyGeneratedAt,
 		&i.CreatedAt,
 	)
 	return i, err

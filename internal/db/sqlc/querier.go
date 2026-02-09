@@ -20,11 +20,13 @@ type Querier interface {
 	GetCertificateByAgentID(ctx context.Context, agentID string) (AgentCertificate, error)
 	GetCertificateByID(ctx context.Context, id pgtype.UUID) (AgentCertificate, error)
 	GetCertificateBySerial(ctx context.Context, serialNumber string) (AgentCertificate, error)
+	GetCertificateBySyncKey(ctx context.Context, syncKey pgtype.UUID) (AgentCertificate, error)
 	GetUser(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
 	ListAllCertificates(ctx context.Context) ([]AgentCertificate, error)
 	ListCertificatesByUser(ctx context.Context, userID pgtype.UUID) ([]AgentCertificate, error)
 	ListUsersPaginated(ctx context.Context, arg ListUsersPaginatedParams) ([]User, error)
+	RegenerateSyncKey(ctx context.Context, arg RegenerateSyncKeyParams) (AgentCertificate, error)
 	RevokeCertificate(ctx context.Context, arg RevokeCertificateParams) (AgentCertificate, error)
 }
 

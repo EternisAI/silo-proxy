@@ -12,6 +12,8 @@ CREATE TABLE agent_certificates (
     is_active BOOLEAN NOT NULL DEFAULT true,
     revoked_at TIMESTAMP,
     revoked_reason VARCHAR(255),
+    sync_key UUID UNIQUE,
+    sync_key_generated_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
@@ -20,6 +22,10 @@ CREATE INDEX idx_agent_certificates_agent_id ON agent_certificates(agent_id);
 CREATE INDEX idx_agent_certificates_serial_number ON agent_certificates(serial_number);
 CREATE INDEX idx_agent_certificates_is_active ON agent_certificates(is_active);
 CREATE INDEX idx_agent_certificates_not_after ON agent_certificates(not_after);
+CREATE INDEX idx_agent_certificates_sync_key ON agent_certificates(sync_key);
+
+COMMENT ON COLUMN agent_certificates.sync_key IS 'Unique key for downloading certificate without admin API key. No expiration. Regenerating invalidates previous key.';
+COMMENT ON COLUMN agent_certificates.sync_key_generated_at IS 'Timestamp when the sync_key was last generated';
 
 -- +goose Down
 DROP TABLE IF EXISTS agent_certificates;

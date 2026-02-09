@@ -7,9 +7,11 @@ INSERT INTO agent_certificates (
     not_before,
     not_after,
     cert_pem,
-    key_pem
+    key_pem,
+    sync_key,
+    sync_key_generated_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 ) RETURNING *;
 
 -- name: GetCertificateByAgentID :one
@@ -56,3 +58,15 @@ WHERE agent_id = $1
   AND revoked_at IS NULL
   AND not_after > NOW()
 LIMIT 1;
+
+-- name: GetCertificateBySyncKey :one
+SELECT * FROM agent_certificates
+WHERE sync_key = $1
+LIMIT 1;
+
+-- name: RegenerateSyncKey :one
+UPDATE agent_certificates
+SET sync_key = $2,
+    sync_key_generated_at = NOW()
+WHERE agent_id = $1
+RETURNING *;
