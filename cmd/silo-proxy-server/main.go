@@ -17,6 +17,7 @@ import (
 	"github.com/EternisAI/silo-proxy/internal/db"
 	"github.com/EternisAI/silo-proxy/internal/db/sqlc"
 	grpcserver "github.com/EternisAI/silo-proxy/internal/grpc/server"
+	"github.com/EternisAI/silo-proxy/internal/provision"
 	"github.com/EternisAI/silo-proxy/internal/users"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -92,11 +93,25 @@ func main() {
 		"range_end", config.Http.AgentPortRange.End,
 		"pool_size", config.Http.AgentPortRange.End-config.Http.AgentPortRange.Start+1)
 
+	var keyStore *provision.KeyStore
+	if config.Provision.Enabled {
+		if certService == nil {
+			slog.Error("Provisioning requires TLS to be enabled")
+			os.Exit(1)
+		}
+		ttl := time.Duration(config.Provision.KeyTTLHours) * time.Hour
+		keyStore = provision.NewKeyStore(ttl)
+		cleanupInterval := time.Duration(config.Provision.CleanupIntervalMinutes) * time.Minute
+		go keyStore.StartCleanup(context.Background(), cleanupInterval)
+		slog.Info("Provisioning enabled", "key_ttl_hours", config.Provision.KeyTTLHours)
+	}
+
 	services := &internalhttp.Services{
 		GrpcServer:  grpcSrv,
 		CertService: certService,
 		AuthService: authService,
 		UserService: userService,
+		KeyStore:    keyStore,
 	}
 
 	gin.SetMode(gin.ReleaseMode)

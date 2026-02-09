@@ -13,11 +13,18 @@ import (
 )
 
 type Config struct {
-	Log  LogConfig
-	Http http.Config
-	Grpc GrpcConfig
-	DB   db.Config   `mapstructure:"db"`
-	JWT  auth.Config `mapstructure:"jwt"`
+	Log       LogConfig
+	Http      http.Config
+	Grpc      GrpcConfig
+	DB        db.Config        `mapstructure:"db"`
+	JWT       auth.Config      `mapstructure:"jwt"`
+	Provision ProvisionConfig  `mapstructure:"provision"`
+}
+
+type ProvisionConfig struct {
+	Enabled                bool `mapstructure:"enabled"`
+	KeyTTLHours            int  `mapstructure:"key_ttl_hours"`
+	CleanupIntervalMinutes int  `mapstructure:"cleanup_interval_minutes"`
 }
 
 type GrpcConfig struct {

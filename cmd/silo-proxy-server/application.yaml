@@ -24,3 +24,7 @@ grpc:
     domain_names: "localhost"
     ip_addresses: "127.0.0.1"
     agent_cert_dir: ./certs/agents
+provision:
+  enabled: false
+  key_ttl_hours: 24
+  cleanup_interval_minutes: 60

@@ -6,6 +6,7 @@ import (
 	"github.com/EternisAI/silo-proxy/internal/auth"
 	"github.com/EternisAI/silo-proxy/internal/cert"
 	grpcserver "github.com/EternisAI/silo-proxy/internal/grpc/server"
+	"github.com/EternisAI/silo-proxy/internal/provision"
 	"github.com/EternisAI/silo-proxy/internal/users"
 	"github.com/gin-gonic/gin"
 )
@@ -15,6 +16,7 @@ type Services struct {
 	CertService *cert.Service
 	AuthService *auth.Service
 	UserService *users.Service
+	KeyStore    *provision.KeyStore
 }
 
 func SetupRoute(engine *gin.Engine, srvs *Services, adminAPIKey string, jwtSecret string) {
@@ -53,5 +55,19 @@ func SetupRoute(engine *gin.Engine, srvs *Services, adminAPIKey string, jwtSecre
 			certRoutes.GET("/:id/certificate", certHandler.GetAgentCertificate)
 			certRoutes.DELETE("/:id/certificate", certHandler.DeleteAgentCertificate)
 		}
+	}
+
+	if srvs.KeyStore != nil {
+		provisionHandler := handler.NewProvisionHandler(srvs.KeyStore, srvs.CertService)
+
+		provisionAdmin := engine.Group("/api/v1/provision-keys")
+		provisionAdmin.Use(middleware.APIKeyAuth(adminAPIKey))
+		{
+			provisionAdmin.POST("", provisionHandler.CreateProvisionKey)
+			provisionAdmin.GET("", provisionHandler.ListProvisionKeys)
+			provisionAdmin.DELETE("/:id", provisionHandler.RevokeProvisionKey)
+		}
+
+		engine.POST("/api/v1/provision", provisionHandler.Provision)
 	}
 }

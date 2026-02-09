@@ -21,6 +21,14 @@ import (
 var AppVersion string
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "provision" {
+		if err := runProvision(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	InitConfig()
 
 	slog.Info("Silo Proxy Agent", "version", AppVersion)
