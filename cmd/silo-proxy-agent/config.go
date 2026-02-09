@@ -18,9 +18,10 @@ type Config struct {
 }
 
 type GrpcConfig struct {
-	ServerAddress string    `mapstructure:"server_address"`
-	AgentID       string    `mapstructure:"agent_id"`
-	TLS           TLSConfig `mapstructure:"tls"`
+	ServerAddress   string    `mapstructure:"server_address"`
+	AgentID         string    `mapstructure:"agent_id"`
+	ProvisioningKey string    `mapstructure:"provisioning_key"`
+	TLS             TLSConfig `mapstructure:"tls"`
 }
 
 type TLSConfig struct {

@@ -111,10 +111,12 @@ func main() {
 		"pool_size", config.Http.AgentPortRange.End-config.Http.AgentPortRange.Start+1)
 
 	services := &internalhttp.Services{
-		GrpcServer:  grpcSrv,
-		CertService: certService,
-		AuthService: authService,
-		UserService: userService,
+		GrpcServer:          grpcSrv,
+		CertService:         certService,
+		AuthService:         authService,
+		UserService:         userService,
+		ProvisioningService: provisioningService,
+		AgentService:        agentService,
 	}
 
 	gin.SetMode(gin.ReleaseMode)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"sync"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"gopkg.in/yaml.v3"
 
 	grpctls "github.com/EternisAI/silo-proxy/internal/grpc/tls"
 )
@@ -25,11 +27,13 @@ const (
 )
 
 type Client struct {
-	serverAddr string
-	agentID    string
-	tlsConfig  *TLSConfig
-	conn       *grpc.ClientConn
-	stream     proto.ProxyService_StreamClient
+	serverAddr      string
+	agentID         string
+	provisioningKey string
+	configPath      string // Path to config file for persistence
+	tlsConfig       *TLSConfig
+	conn            *grpc.ClientConn
+	stream          proto.ProxyService_StreamClient
 
 	sendCh chan *proto.ProxyMessage
 	stopCh chan struct{}
@@ -53,11 +57,13 @@ type TLSConfig struct {
 	ServerNameOverride string
 }
 
-func NewClient(serverAddr, agentID, localURL string, tlsConfig *TLSConfig) *Client {
+func NewClient(serverAddr, agentID, provisioningKey, localURL, configPath string, tlsConfig *TLSConfig) *Client {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Client{
 		serverAddr:        serverAddr,
 		agentID:           agentID,
+		provisioningKey:   provisioningKey,
+		configPath:        configPath,
 		tlsConfig:         tlsConfig,
 		sendCh:            make(chan *proto.ProxyMessage, sendChannelBuffer),
 		stopCh:            make(chan struct{}),
@@ -172,18 +178,49 @@ func (c *Client) connect() error {
 		return fmt.Errorf("failed to create stream: %w", err)
 	}
 
+	// Build first message with either provisioning_key or agent_id
 	firstMsg := &proto.ProxyMessage{
-		Id:   uuid.New().String(),
-		Type: proto.MessageType_PING,
-		Metadata: map[string]string{
-			"agent_id": c.agentID,
-		},
+		Id:       uuid.New().String(),
+		Type:     proto.MessageType_PING,
+		Metadata: make(map[string]string),
+	}
+
+	if c.provisioningKey != "" {
+		// Provisioning flow: send provisioning_key
+		firstMsg.Metadata["provisioning_key"] = c.provisioningKey
+		slog.Info("Attempting to provision agent with key")
+	} else if c.agentID != "" {
+		// Established agent: send agent_id
+		firstMsg.Metadata["agent_id"] = c.agentID
+		slog.Info("Connecting with agent_id", "agent_id", c.agentID)
+	} else {
+		stream.CloseSend()
+		conn.Close()
+		return fmt.Errorf("either agent_id or provisioning_key is required")
 	}
 
 	if err := stream.Send(firstMsg); err != nil {
 		stream.CloseSend()
 		conn.Close()
 		return fmt.Errorf("failed to send first message: %w", err)
+	}
+
+	// Wait for response if provisioning
+	if c.provisioningKey != "" {
+		resp, err := stream.Recv()
+		if err != nil {
+			stream.CloseSend()
+			conn.Close()
+			return fmt.Errorf("failed to receive provisioning response: %w", err)
+		}
+
+		if err := c.handleProvisioningResponse(resp); err != nil {
+			stream.CloseSend()
+			conn.Close()
+			return fmt.Errorf("provisioning failed: %w", err)
+		}
+
+		slog.Info("Agent provisioned successfully", "agent_id", c.agentID)
 	}
 
 	c.mu.Lock()
@@ -359,4 +396,94 @@ func (c *Client) handleRequest(msg *proto.ProxyMessage) {
 	if err := c.Send(response); err != nil {
 		slog.Error("Failed to send response", "error", err, "message_id", msg.Id)
 	}
+}
+
+func (c *Client) handleProvisioningResponse(msg *proto.ProxyMessage) error {
+	status := msg.Metadata["provisioning_status"]
+	if status != "success" {
+		errorMsg := msg.Metadata["error"]
+		if errorMsg == "" {
+			errorMsg = "unknown provisioning error"
+		}
+		return fmt.Errorf("provisioning failed: %s", errorMsg)
+	}
+
+	agentID := msg.Metadata["agent_id"]
+	if agentID == "" {
+		return fmt.Errorf("provisioning response missing agent_id")
+	}
+
+	// Update agent ID
+	c.mu.Lock()
+	c.agentID = agentID
+	c.mu.Unlock()
+
+	// Persist to config file
+	if c.configPath != "" {
+		if err := c.saveAgentIDToConfig(agentID); err != nil {
+			slog.Error("Failed to persist agent_id to config", "error", err)
+			// Don't fail provisioning, agent can reconnect with same key
+		} else {
+			slog.Info("Agent ID persisted to config", "config_path", c.configPath)
+		}
+	}
+
+	return nil
+}
+
+func (c *Client) saveAgentIDToConfig(agentID string) error {
+	if c.configPath == "" {
+		return fmt.Errorf("config path not set")
+	}
+
+	// Read current config file
+	data, err := os.ReadFile(c.configPath)
+	if err != nil {
+		return fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	// Parse YAML
+	var config map[string]interface{}
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return fmt.Errorf("failed to parse config: %w", err)
+	}
+
+	// Update grpc section
+	grpcConfig, ok := config["grpc"].(map[string]interface{})
+	if !ok {
+		grpcConfig = make(map[string]interface{})
+		config["grpc"] = grpcConfig
+	}
+
+	// Set agent_id and remove provisioning_key
+	grpcConfig["agent_id"] = agentID
+	delete(grpcConfig, "provisioning_key")
+
+	// Convert back to YAML
+	updatedData, err := yaml.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	// Add comment at the top
+	comment := "# Agent provisioned successfully on " + time.Now().Format(time.RFC3339) + "\n"
+	finalData := comment + string(updatedData)
+
+	// Write back to file
+	if err := os.WriteFile(c.configPath, []byte(finalData), 0644); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	// Clear provisioning_key from memory
+	c.mu.Lock()
+	c.provisioningKey = ""
+	c.mu.Unlock()
+
+	return nil
+}
+
+func (c *Client) GetAgentID() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.agentID
 }

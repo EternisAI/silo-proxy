@@ -134,13 +134,24 @@ The provisioning system works as follows:
 - `internal/grpc/server/connection_manager_test.go` (MODIFIED) - Test updates
 - `cmd/silo-proxy-server/main.go` (MODIFIED) - Service wiring
 
-### Phase 3: API & Client Integration ⏸️ PLANNED
+### Phase 3: API & Client Integration ✅ COMPLETED
 
 **Deliverables:**
-- HTTP API endpoints (POST/GET/DELETE keys, GET/DELETE agents)
-- Agent config + client changes
-- E2E test: full provisioning flow via dashboard
-- Documentation updates
+- ✅ HTTP API endpoints (POST/GET/DELETE keys, GET/DELETE agents)
+- ✅ Agent config + client changes
+- ✅ Config persistence after provisioning
+- ⏸️ E2E test: full provisioning flow via dashboard (manual testing guide provided)
+
+**Files Created/Modified:**
+- `internal/api/http/dto/provisioning.go` (NEW) - API DTOs
+- `internal/api/http/handler/provisioning.go` (NEW) - Key management endpoints
+- `internal/api/http/handler/agents.go` (NEW) - Agent management endpoints
+- `internal/api/http/router.go` (MODIFIED) - Route registration
+- `cmd/silo-proxy-server/main.go` (MODIFIED) - Service wiring
+- `cmd/silo-proxy-agent/config.go` (MODIFIED) - Add provisioning_key field
+- `cmd/silo-proxy-agent/main.go` (MODIFIED) - Config persistence logic
+- `internal/grpc/client/client.go` (MODIFIED) - Provisioning handshake
+- `docs/provisioning/Overview.md` (UPDATED) - Phase 3 completion
 
 ## Security
 
@@ -221,6 +232,195 @@ psql -d silo-proxy -c "\dt"
 #   agent_connection_logs
 #   users
 ```
+
+### Phase 3 Manual Testing Guide
+
+#### Prerequisites
+- Running PostgreSQL database
+- Server built and configured
+- Agent built
+
+#### Step 1: Start the Server
+```bash
+# Make sure database URL is configured
+export DB_URL="postgres://user:password@localhost:5432/silo-proxy?sslmode=disable"
+
+# Start server
+./bin/silo-proxy-server
+```
+
+#### Step 2: Create a User Account
+```bash
+# Register a new user
+curl -X POST http://localhost:8080/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "testuser",
+    "password": "testpass123",
+    "role": "User"
+  }'
+
+# Login and get JWT token
+TOKEN=$(curl -X POST http://localhost:8080/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "testuser",
+    "password": "testpass123"
+  }' | jq -r .token)
+
+echo "JWT Token: $TOKEN"
+```
+
+#### Step 3: Generate a Provisioning Key
+```bash
+# Create a single-use provisioning key (expires in 24 hours)
+RESPONSE=$(curl -X POST http://localhost:8080/provisioning-keys \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "max_uses": 1,
+    "expires_in_hours": 24,
+    "notes": "Test key for agent-1"
+  }')
+
+echo "Provisioning Response: $RESPONSE"
+
+# Extract the provisioning key
+KEY=$(echo $RESPONSE | jq -r .key)
+echo "Provisioning Key: $KEY"
+```
+
+#### Step 4: Configure and Start Agent
+```bash
+# Create agent config with provisioning key
+cat > cmd/silo-proxy-agent/application.yaml <<EOF
+log:
+  level: info
+
+http:
+  port: 8081
+
+grpc:
+  server_address: localhost:9090
+  provisioning_key: "$KEY"
+  tls:
+    enabled: false
+
+local:
+  service_url: http://localhost:3000
+EOF
+
+# Start agent
+./bin/silo-proxy-agent
+```
+
+**Expected Output:**
+```
+INFO Agent started in provisioning mode
+INFO Connecting to server address=localhost:9090
+INFO Attempting to provision agent with key
+INFO Agent provisioned successfully agent_id=550e8400-...
+INFO Agent ID persisted to config path=/path/to/application.yaml
+INFO Connected to server address=localhost:9090
+```
+
+#### Step 5: Verify Agent Registration
+```bash
+# Check agent config file - provisioning_key should be replaced with agent_id
+cat cmd/silo-proxy-agent/application.yaml
+
+# Expected to see:
+# grpc:
+#   agent_id: "550e8400-..."
+#   # Note: provisioning_key is removed
+
+# List agents via API
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8080/agents | jq
+
+# Expected response:
+# {
+#   "agents": [
+#     {
+#       "id": "550e8400-...",
+#       "status": "active",
+#       "connected": true,
+#       "port": 8100,
+#       "registered_at": "2026-02-09T12:00:00Z",
+#       "last_seen_at": "2026-02-09T12:00:00Z"
+#     }
+#   ]
+# }
+```
+
+#### Step 6: Test Agent Reconnection
+```bash
+# Stop the agent (Ctrl+C)
+# Restart the agent
+./bin/silo-proxy-agent
+
+# Expected output - should use agent_id, not provisioning_key:
+# INFO Agent started with agent_id agent_id=550e8400-...
+# INFO Connecting with agent_id agent_id=550e8400-...
+# INFO Connected to server
+```
+
+#### Step 7: Test Key Management
+```bash
+# List all provisioning keys
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8080/provisioning-keys | jq
+
+# Expected: Key should show status="exhausted" and used_count=1
+
+# Create multi-use key (for testing)
+curl -X POST http://localhost:8080/provisioning-keys \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "max_uses": 3,
+    "expires_in_hours": 48,
+    "notes": "Multi-use key for testing"
+  }' | jq
+
+# Revoke a key
+KEY_ID=$(curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8080/provisioning-keys | jq -r '.keys[0].id')
+
+curl -X DELETE "http://localhost:8080/provisioning-keys/$KEY_ID" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+#### Step 8: Test Agent Deregistration
+```bash
+# Get agent ID
+AGENT_ID=$(curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8080/agents | jq -r '.agents[0].id')
+
+# Deregister agent (soft delete)
+curl -X DELETE "http://localhost:8080/agents/$AGENT_ID" \
+  -H "Authorization: Bearer $TOKEN"
+
+# Verify agent is disconnected and status is "inactive"
+# The agent should be forcefully disconnected
+```
+
+#### Troubleshooting
+
+**Agent fails to provision:**
+- Check provisioning key is valid (not expired/exhausted/revoked)
+- Verify server logs for detailed error messages
+- Ensure database is accessible
+
+**Config file not updated:**
+- Check agent has write permissions to config directory
+- Verify config path detection logic in agent logs
+- Manually update config with agent_id if needed
+
+**Agent disconnects immediately:**
+- Check agent status in database (should be "active")
+- Verify no other agent is using the same agent_id
+- Check server logs for rejection reason
 
 ## Future Enhancements
 

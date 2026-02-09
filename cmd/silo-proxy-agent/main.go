@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -33,9 +34,48 @@ func main() {
 		ServerNameOverride: config.Grpc.TLS.ServerNameOverride,
 	}
 
-	grpcClient := grpcclient.NewClient(config.Grpc.ServerAddress, config.Grpc.AgentID, config.Local.ServiceURL, tlsConfig)
+	// Determine config path for persistence
+	configPath := ""
+	if config.Grpc.ProvisioningKey != "" {
+		// Try to find config file in common locations
+		possiblePaths := []string{
+			"./application.yaml",
+			"./application.yml",
+			"./cmd/silo-proxy-agent/application.yaml",
+			"./cmd/silo-proxy-agent/application.yml",
+		}
+		for _, path := range possiblePaths {
+			if _, err := os.Stat(path); err == nil {
+				absPath, _ := filepath.Abs(path)
+				configPath = absPath
+				slog.Info("Config file found for persistence", "path", configPath)
+				break
+			}
+		}
+		if configPath == "" {
+			slog.Warn("Config file not found, agent_id will not be persisted")
+		}
+	}
+
+	grpcClient := grpcclient.NewClient(
+		config.Grpc.ServerAddress,
+		config.Grpc.AgentID,
+		config.Grpc.ProvisioningKey,
+		config.Local.ServiceURL,
+		configPath,
+		tlsConfig,
+	)
 	if err := grpcClient.Start(); err != nil {
 		slog.Error("Failed to start gRPC client", "error", err)
+		os.Exit(1)
+	}
+
+	if config.Grpc.ProvisioningKey != "" {
+		slog.Info("Agent started in provisioning mode")
+	} else if config.Grpc.AgentID != "" {
+		slog.Info("Agent started with agent_id", "agent_id", config.Grpc.AgentID)
+	} else {
+		slog.Error("Either agent_id or provisioning_key is required")
 		os.Exit(1)
 	}
 
