@@ -7,9 +7,97 @@ package sqlc
 import (
 	"database/sql/driver"
 	"fmt"
+	"net/netip"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type AgentStatus string
+
+const (
+	AgentStatusActive    AgentStatus = "active"
+	AgentStatusInactive  AgentStatus = "inactive"
+	AgentStatusSuspended AgentStatus = "suspended"
+)
+
+func (e *AgentStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = AgentStatus(s)
+	case string:
+		*e = AgentStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for AgentStatus: %T", src)
+	}
+	return nil
+}
+
+type NullAgentStatus struct {
+	AgentStatus AgentStatus `json:"agent_status"`
+	Valid       bool        `json:"valid"` // Valid is true if AgentStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullAgentStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.AgentStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.AgentStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullAgentStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.AgentStatus), nil
+}
+
+type ProvisioningKeyStatus string
+
+const (
+	ProvisioningKeyStatusActive    ProvisioningKeyStatus = "active"
+	ProvisioningKeyStatusExhausted ProvisioningKeyStatus = "exhausted"
+	ProvisioningKeyStatusExpired   ProvisioningKeyStatus = "expired"
+	ProvisioningKeyStatusRevoked   ProvisioningKeyStatus = "revoked"
+)
+
+func (e *ProvisioningKeyStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ProvisioningKeyStatus(s)
+	case string:
+		*e = ProvisioningKeyStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ProvisioningKeyStatus: %T", src)
+	}
+	return nil
+}
+
+type NullProvisioningKeyStatus struct {
+	ProvisioningKeyStatus ProvisioningKeyStatus `json:"provisioning_key_status"`
+	Valid                 bool                  `json:"valid"` // Valid is true if ProvisioningKeyStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullProvisioningKeyStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.ProvisioningKeyStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ProvisioningKeyStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullProvisioningKeyStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ProvisioningKeyStatus), nil
+}
 
 type UserRole string
 
@@ -51,6 +139,43 @@ func (ns NullUserRole) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.UserRole), nil
+}
+
+type Agent struct {
+	ID                   pgtype.UUID      `json:"id"`
+	UserID               pgtype.UUID      `json:"user_id"`
+	ProvisionedWithKeyID pgtype.UUID      `json:"provisioned_with_key_id"`
+	Status               AgentStatus      `json:"status"`
+	CertFingerprint      pgtype.Text      `json:"cert_fingerprint"`
+	RegisteredAt         pgtype.Timestamp `json:"registered_at"`
+	LastSeenAt           pgtype.Timestamp `json:"last_seen_at"`
+	LastIpAddress        *netip.Addr      `json:"last_ip_address"`
+	Metadata             []byte           `json:"metadata"`
+	Notes                pgtype.Text      `json:"notes"`
+}
+
+type AgentConnectionLog struct {
+	ID               pgtype.UUID      `json:"id"`
+	AgentID          pgtype.UUID      `json:"agent_id"`
+	ConnectedAt      pgtype.Timestamp `json:"connected_at"`
+	DisconnectedAt   pgtype.Timestamp `json:"disconnected_at"`
+	DurationSeconds  pgtype.Int4      `json:"duration_seconds"`
+	IpAddress        *netip.Addr      `json:"ip_address"`
+	DisconnectReason pgtype.Text      `json:"disconnect_reason"`
+}
+
+type ProvisioningKey struct {
+	ID        pgtype.UUID           `json:"id"`
+	KeyHash   string                `json:"key_hash"`
+	UserID    pgtype.UUID           `json:"user_id"`
+	Status    ProvisioningKeyStatus `json:"status"`
+	MaxUses   int32                 `json:"max_uses"`
+	UsedCount int32                 `json:"used_count"`
+	ExpiresAt pgtype.Timestamp      `json:"expires_at"`
+	CreatedAt pgtype.Timestamp      `json:"created_at"`
+	UpdatedAt pgtype.Timestamp      `json:"updated_at"`
+	RevokedAt pgtype.Timestamp      `json:"revoked_at"`
+	Notes     pgtype.Text           `json:"notes"`
 }
 
 type User struct {

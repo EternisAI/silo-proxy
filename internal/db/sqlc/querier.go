@@ -12,11 +12,26 @@ import (
 
 type Querier interface {
 	CountUsers(ctx context.Context) (int64, error)
+	CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent, error)
+	CreateConnectionLog(ctx context.Context, arg CreateConnectionLogParams) (AgentConnectionLog, error)
+	CreateProvisioningKey(ctx context.Context, arg CreateProvisioningKeyParams) (ProvisioningKey, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeleteUser(ctx context.Context, id pgtype.UUID) error
+	ExpireOldKeys(ctx context.Context) error
+	GetAgentByID(ctx context.Context, id pgtype.UUID) (Agent, error)
+	GetAgentConnectionHistory(ctx context.Context, arg GetAgentConnectionHistoryParams) ([]AgentConnectionLog, error)
+	GetProvisioningKeyByHash(ctx context.Context, keyHash string) (ProvisioningKey, error)
 	GetUser(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
+	IncrementKeyUsage(ctx context.Context, id pgtype.UUID) error
+	ListAgentsByUser(ctx context.Context, userID pgtype.UUID) ([]Agent, error)
+	ListProvisioningKeysByUser(ctx context.Context, userID pgtype.UUID) ([]ProvisioningKey, error)
 	ListUsersPaginated(ctx context.Context, arg ListUsersPaginatedParams) ([]User, error)
+	RevokeProvisioningKey(ctx context.Context, arg RevokeProvisioningKeyParams) error
+	UpdateAgentCertFingerprint(ctx context.Context, arg UpdateAgentCertFingerprintParams) error
+	UpdateAgentLastSeen(ctx context.Context, arg UpdateAgentLastSeenParams) error
+	UpdateAgentStatus(ctx context.Context, arg UpdateAgentStatusParams) error
+	UpdateConnectionLog(ctx context.Context, arg UpdateConnectionLogParams) error
 }
 
 var _ Querier = (*Queries)(nil)
