@@ -1,39 +1,126 @@
 package server
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"time"
 
+	"github.com/EternisAI/silo-proxy/internal/agents"
+	"github.com/EternisAI/silo-proxy/internal/provisioning"
 	"github.com/EternisAI/silo-proxy/proto"
 	"github.com/google/uuid"
 )
 
 type StreamHandler struct {
-	connManager *ConnectionManager
-	server      *Server
+	connManager         *ConnectionManager
+	server              *Server
+	provisioningService *provisioning.Service
+	agentService        *agents.Service
+	defaultUserID       string // Default user for legacy agent migration
 }
 
-func NewStreamHandler(connManager *ConnectionManager, server *Server) *StreamHandler {
+func NewStreamHandler(
+	connManager *ConnectionManager,
+	server *Server,
+	provisioningService *provisioning.Service,
+	agentService *agents.Service,
+	defaultUserID string,
+) *StreamHandler {
 	return &StreamHandler{
-		connManager: connManager,
-		server:      server,
+		connManager:         connManager,
+		server:              server,
+		provisioningService: provisioningService,
+		agentService:        agentService,
+		defaultUserID:       defaultUserID,
 	}
 }
 
 func (sh *StreamHandler) HandleStream(stream proto.ProxyService_StreamServer) error {
+	ctx := stream.Context()
+
 	firstMsg, err := stream.Recv()
 	if err != nil {
 		return fmt.Errorf("failed to receive first message: %w", err)
 	}
 
+	// Extract remote IP from context (if available)
+	remoteIP := extractRemoteIP(ctx)
+
+	// Extract provisioning key and agent_id from metadata
+	provisioningKey := firstMsg.Metadata["provisioning_key"]
 	agentID := firstMsg.Metadata["agent_id"]
-	if agentID == "" {
-		return fmt.Errorf("agent_id not found in first message metadata")
+
+	// Connection log ID for tracking
+	var connectionLogID string
+
+	if provisioningKey != "" {
+		// NEW: Provisioning flow
+		slog.Info("Agent provisioning request received", "remote_ip", remoteIP)
+
+		result, err := sh.provisioningService.ProvisionAgent(ctx, provisioningKey, remoteIP)
+		if err != nil {
+			sh.sendProvisioningError(stream, err)
+			return fmt.Errorf("provisioning failed: %w", err)
+		}
+
+		sh.sendProvisioningSuccess(stream, result)
+		agentID = result.AgentID
+
+		slog.Info("Agent provisioned successfully", "agent_id", agentID, "remote_ip", remoteIP)
+
+	} else if agentID != "" {
+		// Established agent: validate against DB
+		agent, err := sh.agentService.GetAgentByID(ctx, agentID)
+		if err != nil {
+			if errors.Is(err, agents.ErrAgentNotFound) {
+				// Legacy agent auto-migration
+				slog.Warn("Legacy agent detected, auto-migrating", "agent_id", agentID)
+
+				agent, err = sh.agentService.CreateLegacyAgent(ctx, agentID, sh.defaultUserID)
+				if err != nil {
+					return fmt.Errorf("failed to create legacy agent: %w", err)
+				}
+
+				slog.Info("Legacy agent auto-migrated",
+					"agent_id", agent.ID,
+					"legacy_id", agentID,
+					"user_id", sh.defaultUserID)
+
+				// Use the new agent ID
+				agentID = agent.ID
+			} else {
+				return fmt.Errorf("failed to get agent: %w", err)
+			}
+		} else {
+			// Validate agent status
+			if agent.Status != "active" {
+				slog.Warn("Agent connection rejected, status not active",
+					"agent_id", agentID,
+					"status", agent.Status)
+				return fmt.Errorf("agent suspended or inactive")
+			}
+		}
+
+		slog.Info("Agent authenticated", "agent_id", agentID, "remote_ip", remoteIP)
+	} else {
+		return fmt.Errorf("either provisioning_key or agent_id required in first message metadata")
+	}
+
+	// Create connection log
+	logID, err := sh.agentService.CreateConnectionLog(ctx, agentID, time.Now(), remoteIP)
+	if err != nil {
+		slog.Error("Failed to create connection log", "agent_id", agentID, "error", err)
+		// Don't fail the connection, just log the error
+	} else {
+		connectionLogID = logID
 	}
 
 	slog.Info("Agent connection established", "agent_id", agentID)
 
+	// Register with ConnectionManager
 	conn, err := sh.connManager.Register(agentID, stream)
 	if err != nil {
 		return fmt.Errorf("failed to register agent: %w", err)
@@ -41,10 +128,25 @@ func (sh *StreamHandler) HandleStream(stream proto.ProxyService_StreamServer) er
 
 	defer func() {
 		sh.connManager.Deregister(agentID)
+
+		// Update connection log with disconnect information
+		if connectionLogID != "" {
+			if err := sh.agentService.UpdateConnectionLog(ctx, connectionLogID, time.Now(), "normal disconnect"); err != nil {
+				slog.Error("Failed to update connection log", "log_id", connectionLogID, "error", err)
+			}
+		}
+
 		slog.Info("Agent disconnected", "agent_id", agentID)
 	}()
 
 	sh.connManager.UpdateLastSeen(agentID)
+
+	// Update agent last seen in database (async)
+	go func() {
+		if err := sh.agentService.UpdateLastSeen(context.Background(), agentID, time.Now(), remoteIP); err != nil {
+			slog.Error("Failed to update agent last seen", "agent_id", agentID, "error", err)
+		}
+	}()
 
 	if err := sh.processMessage(agentID, firstMsg); err != nil {
 		slog.Error("Failed to process first message", "agent_id", agentID, "error", err)
@@ -142,4 +244,46 @@ func (sh *StreamHandler) processMessage(agentID string, msg *proto.ProxyMessage)
 	}
 
 	return nil
+}
+
+func (sh *StreamHandler) sendProvisioningSuccess(stream proto.ProxyService_StreamServer, result *provisioning.AgentProvisionResult) error {
+	msg := &proto.ProxyMessage{
+		Id:   uuid.New().String(),
+		Type: proto.MessageType_PONG,
+		Metadata: map[string]string{
+			"provisioning_status": "success",
+			"agent_id":            result.AgentID,
+		},
+	}
+
+	if result.CertFingerprint != "" {
+		msg.Metadata["cert_fingerprint"] = result.CertFingerprint
+	}
+
+	if err := stream.Send(msg); err != nil {
+		return fmt.Errorf("failed to send provisioning success: %w", err)
+	}
+
+	return nil
+}
+
+func (sh *StreamHandler) sendProvisioningError(stream proto.ProxyService_StreamServer, err error) {
+	msg := &proto.ProxyMessage{
+		Id:   uuid.New().String(),
+		Type: proto.MessageType_PONG,
+		Metadata: map[string]string{
+			"provisioning_status": "failed",
+			"error":               err.Error(),
+		},
+	}
+
+	if sendErr := stream.Send(msg); sendErr != nil {
+		slog.Error("Failed to send provisioning error message", "error", sendErr)
+	}
+}
+
+func extractRemoteIP(ctx context.Context) string {
+	// This is a placeholder - actual implementation depends on gRPC metadata
+	// For now, return empty string
+	return ""
 }

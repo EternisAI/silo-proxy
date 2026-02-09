@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/EternisAI/silo-proxy/internal/agents"
 	"github.com/EternisAI/silo-proxy/proto"
 )
 
@@ -41,16 +42,18 @@ type ConnectionManager struct {
 	mu                 sync.RWMutex
 	stopCh             chan struct{}
 	agentServerManager AgentServerManager // Optional: manages per-agent HTTP servers
+	agentService       *agents.Service    // Optional: for database persistence
 }
 
 // NewConnectionManager creates a new ConnectionManager.
 // The agentServerManager parameter is optional (can be nil) and enables
 // per-agent HTTP server management when provided.
-func NewConnectionManager(agentServerManager AgentServerManager) *ConnectionManager {
+func NewConnectionManager(agentServerManager AgentServerManager, agentService *agents.Service) *ConnectionManager {
 	cm := &ConnectionManager{
 		agents:             make(map[string]*AgentConnection),
 		stopCh:             make(chan struct{}),
 		agentServerManager: agentServerManager,
+		agentService:       agentService,
 	}
 	go cm.cleanupStaleConnections()
 	return cm
@@ -182,11 +185,27 @@ func (cm *ConnectionManager) SendToAgent(agentID string, msg *proto.ProxyMessage
 
 func (cm *ConnectionManager) UpdateLastSeen(agentID string) {
 	cm.mu.Lock()
-	defer cm.mu.Unlock()
-
-	if conn, ok := cm.agents[agentID]; ok {
+	conn, ok := cm.agents[agentID]
+	if ok {
 		conn.LastSeen = time.Now()
-		slog.Debug("Agent last seen updated", "agent_id", agentID)
+	}
+	cm.mu.Unlock()
+
+	if !ok {
+		return
+	}
+
+	slog.Debug("Agent last seen updated", "agent_id", agentID)
+
+	// Async DB update (non-blocking)
+	if cm.agentService != nil {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := cm.agentService.UpdateLastSeen(ctx, agentID, conn.LastSeen, ""); err != nil {
+				slog.Debug("Failed to update last seen in database", "agent_id", agentID, "error", err)
+			}
+		}()
 	}
 }
 

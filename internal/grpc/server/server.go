@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/EternisAI/silo-proxy/internal/agents"
+	"github.com/EternisAI/silo-proxy/internal/provisioning"
 	"github.com/EternisAI/silo-proxy/proto"
 	"google.golang.org/grpc"
 
@@ -39,7 +41,7 @@ type TLSConfig struct {
 }
 
 func NewServer(port int, tlsConfig *TLSConfig) *Server {
-	connManager := NewConnectionManager(nil)
+	connManager := NewConnectionManager(nil, nil)
 
 	s := &Server{
 		connManager:     connManager,
@@ -48,9 +50,7 @@ func NewServer(port int, tlsConfig *TLSConfig) *Server {
 		pendingRequests: make(map[string]chan *proto.ProxyMessage),
 	}
 
-	streamHandler := NewStreamHandler(connManager, s)
-	s.streamHandler = streamHandler
-
+	// streamHandler will be initialized later via SetServices
 	return s
 }
 
@@ -177,4 +177,13 @@ func (s *Server) GetConnectionManager() *ConnectionManager {
 
 func (s *Server) SetAgentServerManager(asm AgentServerManager) {
 	s.connManager.SetAgentServerManager(asm)
+}
+
+// SetServices initializes the stream handler with provisioning and agent services
+func (s *Server) SetServices(provisioningService *provisioning.Service, agentService *agents.Service, defaultUserID string) {
+	// Update connection manager with agent service for DB persistence
+	s.connManager.agentService = agentService
+
+	// Initialize stream handler with all services
+	s.streamHandler = NewStreamHandler(s.connManager, s, provisioningService, agentService, defaultUserID)
 }

@@ -12,11 +12,13 @@ import (
 	"time"
 
 	internalhttp "github.com/EternisAI/silo-proxy/internal/api/http"
+	"github.com/EternisAI/silo-proxy/internal/agents"
 	"github.com/EternisAI/silo-proxy/internal/auth"
 	"github.com/EternisAI/silo-proxy/internal/cert"
 	"github.com/EternisAI/silo-proxy/internal/db"
 	"github.com/EternisAI/silo-proxy/internal/db/sqlc"
 	grpcserver "github.com/EternisAI/silo-proxy/internal/grpc/server"
+	"github.com/EternisAI/silo-proxy/internal/provisioning"
 	"github.com/EternisAI/silo-proxy/internal/users"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -46,17 +48,9 @@ func main() {
 	authService := auth.NewService(queries, config.JWT)
 	userService := users.NewService(queries)
 
-	tlsConfig := &grpcserver.TLSConfig{
-		Enabled:    config.Grpc.TLS.Enabled,
-		CertFile:   config.Grpc.TLS.CertFile,
-		KeyFile:    config.Grpc.TLS.KeyFile,
-		CAFile:     config.Grpc.TLS.CAFile,
-		ClientAuth: config.Grpc.TLS.ClientAuth,
-	}
-
+	// Initialize provisioning and agent services
 	var certService *cert.Service
 	if config.Grpc.TLS.Enabled {
-
 		var err error
 		certService, err = cert.New(
 			config.Grpc.TLS.CAFile,
@@ -73,7 +67,31 @@ func main() {
 		}
 	}
 
+	provisioningService := provisioning.NewService(queries, certService)
+	agentService := agents.NewService(queries)
+
+	// Get or create default user for legacy agent migration
+	defaultUser, err := queries.GetUserByUsername(context.Background(), "admin")
+	if err != nil {
+		slog.Warn("Default user 'admin' not found, legacy agent migration may fail")
+	}
+	defaultUserID := ""
+	if defaultUser.ID.Valid {
+		defaultUserID = fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+			defaultUser.ID.Bytes[0:4], defaultUser.ID.Bytes[4:6], defaultUser.ID.Bytes[6:8],
+			defaultUser.ID.Bytes[8:10], defaultUser.ID.Bytes[10:16])
+	}
+
+	tlsConfig := &grpcserver.TLSConfig{
+		Enabled:    config.Grpc.TLS.Enabled,
+		CertFile:   config.Grpc.TLS.CertFile,
+		KeyFile:    config.Grpc.TLS.KeyFile,
+		CAFile:     config.Grpc.TLS.CAFile,
+		ClientAuth: config.Grpc.TLS.ClientAuth,
+	}
+
 	grpcSrv := grpcserver.NewServer(config.Grpc.Port, tlsConfig)
+	grpcSrv.SetServices(provisioningService, agentService, defaultUserID)
 
 	portManager, err := internalhttp.NewPortManager(
 		config.Http.AgentPortRange.Start,

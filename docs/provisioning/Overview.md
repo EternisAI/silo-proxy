@@ -115,22 +115,24 @@ The provisioning system works as follows:
 - `internal/db/queries/agent_connection_logs.sql`
 - `internal/db/sqlc/*.go` (generated)
 
-### Phase 2: Core Provisioning Logic 🚧 IN PROGRESS
+### Phase 2: Core Provisioning Logic ✅ COMPLETED
 
 **Deliverables:**
-- Service layer (provisioning, agents)
-- gRPC stream handler integration
-- ConnectionManager database persistence
-- E2E test: agent provisions via gRPC stream
+- ✅ Service layer (provisioning, agents)
+- ✅ gRPC stream handler integration
+- ✅ ConnectionManager database persistence
+- ⏸️ E2E test: agent provisions via gRPC stream (will be done in Phase 3)
 
-**Files to Create/Modify:**
-- `internal/provisioning/service.go` (NEW)
-- `internal/provisioning/models.go` (NEW)
-- `internal/agents/service.go` (NEW)
-- `internal/agents/models.go` (NEW)
-- `internal/grpc/server/stream_handler.go` (MODIFY)
-- `internal/grpc/server/connection_manager.go` (MODIFY)
-- `cmd/silo-proxy-server/main.go` (MODIFY)
+**Files Created/Modified:**
+- `internal/provisioning/service.go` (NEW) - Key generation, validation, agent provisioning
+- `internal/provisioning/models.go` (NEW) - Domain models
+- `internal/agents/service.go` (NEW) - Agent management, connection logging
+- `internal/agents/models.go` (NEW) - Domain models
+- `internal/grpc/server/stream_handler.go` (MODIFIED) - Provisioning handshake
+- `internal/grpc/server/connection_manager.go` (MODIFIED) - DB persistence
+- `internal/grpc/server/server.go` (MODIFIED) - Service initialization
+- `internal/grpc/server/connection_manager_test.go` (MODIFIED) - Test updates
+- `cmd/silo-proxy-server/main.go` (MODIFIED) - Service wiring
 
 ### Phase 3: API & Client Integration ⏸️ PLANNED
 

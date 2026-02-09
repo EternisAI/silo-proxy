@@ -78,7 +78,7 @@ func (m *MockStream) RecvMsg(msg interface{}) error {
 }
 
 func TestNewConnectionManager(t *testing.T) {
-	cm := NewConnectionManager(nil)
+	cm := NewConnectionManager(nil, nil)
 	assert.NotNil(t, cm)
 	assert.NotNil(t, cm.agents)
 	assert.NotNil(t, cm.stopCh)
@@ -89,7 +89,7 @@ func TestNewConnectionManager(t *testing.T) {
 
 func TestNewConnectionManager_WithAgentServerManager(t *testing.T) {
 	mockASM := new(MockAgentServerManager)
-	cm := NewConnectionManager(mockASM)
+	cm := NewConnectionManager(mockASM, nil)
 
 	assert.NotNil(t, cm)
 	assert.NotNil(t, cm.agentServerManager)
@@ -99,7 +99,7 @@ func TestNewConnectionManager_WithAgentServerManager(t *testing.T) {
 }
 
 func TestConnectionManager_Register_WithoutServerManager(t *testing.T) {
-	cm := NewConnectionManager(nil)
+	cm := NewConnectionManager(nil, nil)
 	defer cm.Stop()
 
 	mockStream := NewMockStream()
@@ -118,7 +118,7 @@ func TestConnectionManager_Register_WithServerManager(t *testing.T) {
 	mockASM.On("StopAgentServer", "agent-1").Return(nil)
 	mockASM.On("Shutdown").Return(nil)
 
-	cm := NewConnectionManager(mockASM)
+	cm := NewConnectionManager(mockASM, nil)
 
 	mockStream := NewMockStream()
 	conn, err := cm.Register("agent-1", mockStream)
@@ -138,7 +138,7 @@ func TestConnectionManager_Register_ServerManagerError(t *testing.T) {
 	mockASM.On("StartAgentServer", "agent-1").Return(0, assert.AnError)
 	mockASM.On("Shutdown").Return(nil)
 
-	cm := NewConnectionManager(mockASM)
+	cm := NewConnectionManager(mockASM, nil)
 
 	mockStream := NewMockStream()
 	conn, err := cm.Register("agent-1", mockStream)
@@ -160,7 +160,7 @@ func TestConnectionManager_Register_ReplaceExisting(t *testing.T) {
 	mockASM.On("StopAgentServer", "agent-1").Return(nil).Once() // for cm.Stop()
 	mockASM.On("Shutdown").Return(nil)
 
-	cm := NewConnectionManager(mockASM)
+	cm := NewConnectionManager(mockASM, nil)
 
 	// Register first connection
 	mockStream1 := NewMockStream()
@@ -184,7 +184,7 @@ func TestConnectionManager_Register_ReplaceExisting(t *testing.T) {
 }
 
 func TestConnectionManager_Deregister_WithoutServerManager(t *testing.T) {
-	cm := NewConnectionManager(nil)
+	cm := NewConnectionManager(nil, nil)
 	defer cm.Stop()
 
 	mockStream := NewMockStream()
@@ -204,7 +204,7 @@ func TestConnectionManager_Deregister_WithServerManager(t *testing.T) {
 	mockASM.On("StartAgentServer", "agent-1").Return(8100, nil)
 	mockASM.On("StopAgentServer", "agent-1").Return(nil)
 
-	cm := NewConnectionManager(mockASM)
+	cm := NewConnectionManager(mockASM, nil)
 	defer func() {
 		mockASM.On("Shutdown").Return(nil)
 		cm.Stop()
@@ -225,7 +225,7 @@ func TestConnectionManager_Deregister_WithServerManager(t *testing.T) {
 }
 
 func TestConnectionManager_Deregister_NonExistent(t *testing.T) {
-	cm := NewConnectionManager(nil)
+	cm := NewConnectionManager(nil, nil)
 	defer cm.Stop()
 
 	// Should not panic
@@ -240,7 +240,7 @@ func TestConnectionManager_Stop_WithServerManager(t *testing.T) {
 	mockASM.On("StopAgentServer", "agent-2").Return(nil)
 	mockASM.On("Shutdown").Return(nil)
 
-	cm := NewConnectionManager(mockASM)
+	cm := NewConnectionManager(mockASM, nil)
 
 	mockStream1 := NewMockStream()
 	_, err := cm.Register("agent-1", mockStream1)
@@ -260,7 +260,7 @@ func TestConnectionManager_Stop_WithServerManager(t *testing.T) {
 }
 
 func TestConnectionManager_GetConnection(t *testing.T) {
-	cm := NewConnectionManager(nil)
+	cm := NewConnectionManager(nil, nil)
 	defer cm.Stop()
 
 	mockStream := NewMockStream()
@@ -276,7 +276,7 @@ func TestConnectionManager_GetConnection(t *testing.T) {
 }
 
 func TestConnectionManager_ListConnections(t *testing.T) {
-	cm := NewConnectionManager(nil)
+	cm := NewConnectionManager(nil, nil)
 	defer cm.Stop()
 
 	// Initially empty
@@ -299,7 +299,7 @@ func TestConnectionManager_ListConnections(t *testing.T) {
 }
 
 func TestConnectionManager_UpdateLastSeen(t *testing.T) {
-	cm := NewConnectionManager(nil)
+	cm := NewConnectionManager(nil, nil)
 	defer cm.Stop()
 
 	mockStream := NewMockStream()
@@ -326,7 +326,7 @@ func TestConnectionManager_RemoveStaleConnections_WithServerManager(t *testing.T
 	mockASM.On("StartAgentServer", "agent-1").Return(8100, nil)
 	mockASM.On("StopAgentServer", "agent-1").Return(nil)
 
-	cm := NewConnectionManager(mockASM)
+	cm := NewConnectionManager(mockASM, nil)
 	defer func() {
 		mockASM.On("Shutdown").Return(nil)
 		cm.Stop()
@@ -363,7 +363,7 @@ func TestConnectionManager_ConcurrentRegistration(t *testing.T) {
 	}
 	mockASM.On("Shutdown").Return(nil)
 
-	cm := NewConnectionManager(mockASM)
+	cm := NewConnectionManager(mockASM, nil)
 
 	// Register 10 agents concurrently
 	done := make(chan bool, 10)
@@ -397,7 +397,7 @@ func TestConnectionManager_PortFieldPersistence(t *testing.T) {
 	mockASM.On("StopAgentServer", "agent-1").Return(nil)
 	mockASM.On("Shutdown").Return(nil)
 
-	cm := NewConnectionManager(mockASM)
+	cm := NewConnectionManager(mockASM, nil)
 
 	mockStream := NewMockStream()
 	_, err := cm.Register("agent-1", mockStream)
@@ -420,7 +420,7 @@ func TestConnectionManager_PortFieldPersistence(t *testing.T) {
 }
 
 func TestAgentConnection_PortFieldZeroWithoutManager(t *testing.T) {
-	cm := NewConnectionManager(nil)
+	cm := NewConnectionManager(nil, nil)
 	defer cm.Stop()
 
 	mockStream := NewMockStream()
@@ -432,7 +432,7 @@ func TestAgentConnection_PortFieldZeroWithoutManager(t *testing.T) {
 }
 
 func BenchmarkConnectionManager_Register(b *testing.B) {
-	cm := NewConnectionManager(nil)
+	cm := NewConnectionManager(nil, nil)
 	defer cm.Stop()
 
 	b.ResetTimer()
@@ -450,7 +450,7 @@ func BenchmarkConnectionManager_RegisterWithServerManager(b *testing.B) {
 	mockASM.On("StopAgentServer", mock.Anything).Return(nil)
 	mockASM.On("Shutdown").Return(nil)
 
-	cm := NewConnectionManager(mockASM)
+	cm := NewConnectionManager(mockASM, nil)
 	defer cm.Stop()
 
 	b.ResetTimer()
