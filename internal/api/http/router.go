@@ -51,6 +51,7 @@ func SetupRoute(engine *gin.Engine, srvs *Services, adminAPIKey string, jwtSecre
 		{
 			certRoutes.POST("/:id/certificate", certHandler.CreateAgentCertificate)
 			certRoutes.GET("/:id/certificate", certHandler.GetAgentCertificate)
+			certRoutes.GET("/:id/certificate/download", certHandler.DownloadCertificateBySyncKey)
 			certRoutes.DELETE("/:id/certificate", certHandler.DeleteAgentCertificate)
 			certRoutes.POST("/:id/certificate/revoke", certHandler.RevokeAgentCertificate)
 			certRoutes.GET("/certificates", certHandler.ListUserAgentCertificates)

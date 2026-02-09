@@ -9,7 +9,9 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/EternisAI/silo-proxy/internal/db/sqlc"
@@ -196,6 +198,16 @@ func (s *Service) GenerateAgentCertWithDB(ctx context.Context, agentID string, u
 
 	serialNumberStr := agentCert.SerialNumber.String()
 
+	syncKey := pgtype.UUID{}
+	if err := syncKey.Scan(uuid.New().String()); err != nil {
+		return nil, nil, fmt.Errorf("failed to generate sync_key: %w", err)
+	}
+
+	syncKeyGeneratedAt := pgtype.Timestamp{
+		Time:  time.Now(),
+		Valid: true,
+	}
+
 	_, err = s.queries.CreateAgentCertificate(ctx, sqlc.CreateAgentCertificateParams{
 		UserID:            userID,
 		AgentID:           agentID,
@@ -209,8 +221,10 @@ func (s *Service) GenerateAgentCertWithDB(ctx context.Context, agentID string, u
 			Time:  agentCert.NotAfter,
 			Valid: true,
 		},
-		CertPem: string(certPEM),
-		KeyPem:  string(keyPEM),
+		CertPem:            string(certPEM),
+		KeyPem:             string(keyPEM),
+		SyncKey:            syncKey,
+		SyncKeyGeneratedAt: syncKeyGeneratedAt,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to store certificate in database: %w", err)
@@ -220,10 +234,36 @@ func (s *Service) GenerateAgentCertWithDB(ctx context.Context, agentID string, u
 	return agentCert, agentKey, nil
 }
 
+func (s *Service) GetAgentCertByAgentID(ctx context.Context, agentID string) (*sqlc.AgentCertificate, error) {
+	cert, err := s.queries.GetCertificateByAgentID(ctx, agentID)
+	if err != nil {
+		return nil, fmt.Errorf("certificate not found in database: %w", err)
+	}
+
+	return &cert, nil
+}
+
 func (s *Service) GetAgentCertFromDB(ctx context.Context, agentID string) (certBytes, keyBytes []byte, err error) {
 	cert, err := s.queries.GetCertificateByAgentID(ctx, agentID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("certificate not found in database: %w", err)
+	}
+
+	return []byte(cert.CertPem), []byte(cert.KeyPem), nil
+}
+
+func (s *Service) GetAgentCertBySyncKey(ctx context.Context, syncKey pgtype.UUID) (certBytes, keyBytes []byte, err error) {
+	cert, err := s.queries.GetCertificateBySyncKey(ctx, syncKey)
+	if err != nil {
+		return nil, nil, fmt.Errorf("certificate not found: %w", err)
+	}
+
+	if !cert.IsActive {
+		return nil, nil, fmt.Errorf("certificate is inactive")
+	}
+
+	if cert.RevokedAt.Valid {
+		return nil, nil, fmt.Errorf("certificate has been revoked")
 	}
 
 	return []byte(cert.CertPem), []byte(cert.KeyPem), nil

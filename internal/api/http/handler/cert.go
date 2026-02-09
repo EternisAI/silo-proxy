@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
+	"github.com/EternisAI/silo-proxy/internal/api/http/dto"
 	"github.com/EternisAI/silo-proxy/internal/cert"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -71,7 +73,7 @@ func (h *CertHandler) CreateAgentCertificate(ctx *gin.Context) {
 
 	slog.Info("Creating agent certificate", "agent_id", agentID, "user_id", userID)
 
-	agentCert, agentKey, err := h.certService.GenerateAgentCertWithDB(ctx, agentID, userID)
+	agentCert, _, err := h.certService.GenerateAgentCertWithDB(ctx, agentID, userID)
 	if err != nil {
 		slog.Error("Failed to generate agent certificate", "error", err, "agent_id", agentID)
 		ctx.JSON(http.StatusInternalServerError, gin.H{
@@ -80,29 +82,25 @@ func (h *CertHandler) CreateAgentCertificate(ctx *gin.Context) {
 		return
 	}
 
-	caCertBytes, err := h.certService.GetCACert()
+	certRecord, err := h.certService.GetAgentCertByAgentID(ctx, agentID)
 	if err != nil {
-		slog.Error("Failed to read CA certificate", "error", err, "agent_id", agentID)
+		slog.Error("Failed to retrieve certificate record", "error", err, "agent_id", agentID)
 		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to read CA certificate",
+			"error": "Failed to retrieve certificate details",
 		})
 		return
 	}
 
-	zipBuffer, err := h.createCertZip(agentID, agentCert, agentKey, caCertBytes)
-	if err != nil {
-		slog.Error("Failed to create zip file", "error", err, "agent_id", agentID)
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to create zip file",
-		})
-		return
+	response := dto.CertificateCreatedResponse{
+		AgentID:   agentID,
+		SyncKey:   certRecord.SyncKey.String(),
+		ExpiresAt: agentCert.NotAfter.Format(time.RFC3339),
+		Message:   "Certificate created successfully. Use the sync_key to download the certificate.",
 	}
 
-	ctx.Header("Content-Type", "application/zip")
-	ctx.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s-certs.zip\"", agentID))
-	ctx.Data(http.StatusCreated, "application/zip", zipBuffer.Bytes())
+	ctx.JSON(http.StatusCreated, response)
 
-	slog.Info("Agent certificate created successfully", "agent_id", agentID, "zip_size", zipBuffer.Len())
+	slog.Info("Agent certificate created successfully", "agent_id", agentID, "sync_key", response.SyncKey)
 }
 
 func (h *CertHandler) GetAgentCertificate(ctx *gin.Context) {
@@ -153,6 +151,73 @@ func (h *CertHandler) GetAgentCertificate(ctx *gin.Context) {
 	ctx.Data(http.StatusOK, "application/zip", zipBuffer.Bytes())
 
 	slog.Info("Agent certificate retrieved successfully", "agent_id", agentID, "zip_size", zipBuffer.Len())
+}
+
+func (h *CertHandler) DownloadCertificateBySyncKey(ctx *gin.Context) {
+	if h.certService == nil {
+		slog.Warn("Certificate download requested but TLS is disabled")
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": "TLS is not enabled on this server",
+		})
+		return
+	}
+
+	agentID, ok := h.validateAgentID(ctx)
+	if !ok {
+		return
+	}
+
+	syncKeyStr := ctx.Query("sync_key")
+	if syncKeyStr == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": "sync_key query parameter is required",
+		})
+		return
+	}
+
+	var syncKey pgtype.UUID
+	if err := syncKey.Scan(syncKeyStr); err != nil {
+		slog.Warn("Invalid sync_key format", "error", err, "sync_key", syncKeyStr)
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid sync_key format",
+		})
+		return
+	}
+
+	slog.Info("Downloading certificate with sync_key", "agent_id", agentID, "sync_key", syncKeyStr)
+
+	agentCertBytes, agentKeyBytes, err := h.certService.GetAgentCertBySyncKey(ctx, syncKey)
+	if err != nil {
+		slog.Error("Failed to retrieve certificate by sync_key", "error", err, "agent_id", agentID)
+		ctx.JSON(http.StatusNotFound, gin.H{
+			"error": "Certificate not found or invalid",
+		})
+		return
+	}
+
+	caCertBytes, err := h.certService.GetCACert()
+	if err != nil {
+		slog.Error("Failed to read CA certificate", "error", err, "agent_id", agentID)
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to read CA certificate",
+		})
+		return
+	}
+
+	zipBuffer, err := h.createCertZipFromBytes(agentID, agentCertBytes, agentKeyBytes, caCertBytes)
+	if err != nil {
+		slog.Error("Failed to create zip file", "error", err, "agent_id", agentID)
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to create zip file",
+		})
+		return
+	}
+
+	ctx.Header("Content-Type", "application/zip")
+	ctx.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s-certs.zip\"", agentID))
+	ctx.Data(http.StatusOK, "application/zip", zipBuffer.Bytes())
+
+	slog.Info("Certificate downloaded successfully via sync_key", "agent_id", agentID, "zip_size", zipBuffer.Len())
 }
 
 func (h *CertHandler) DeleteAgentCertificate(ctx *gin.Context) {
