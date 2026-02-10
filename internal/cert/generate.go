@@ -157,3 +157,19 @@ func (s *Service) GenerateAgentCert(agentID string) (*x509.Certificate, *rsa.Pri
 	slog.Info("Generated and saved agent certificate", "agent_id", agentID, "cert_path", certPath, "key_path", keyPath)
 	return agentCert, agentKey, nil
 }
+
+func (s *Service) GenerateAgentCertIfNotExists(agentID string) (*x509.Certificate, *rsa.PrivateKey, bool, error) {
+	s.agentCertMu.Lock()
+	defer s.agentCertMu.Unlock()
+
+	if s.AgentCertExists(agentID) {
+		return nil, nil, false, nil
+	}
+
+	agentCert, agentKey, err := s.GenerateAgentCert(agentID)
+	if err != nil {
+		return nil, nil, false, err
+	}
+
+	return agentCert, agentKey, true, nil
+}
